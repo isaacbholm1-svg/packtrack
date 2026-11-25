@@ -2,6 +2,7 @@ import { db } from './lib/db.js';
 import { carrierList, carrierName, detectCarrier, normalizeNumber } from './lib/carriers.js';
 import { STORES } from './lib/stores.js';
 import { extractShipments } from './lib/extract.js';
+import { bookmarkletSource, parsePasted } from './lib/bookmarklet.js';
 import { getSettings, updateSettings } from './lib/settings.js';
 import { getProvider } from './lib/providers/index.js';
 import {
@@ -350,10 +351,23 @@ function appUrl() {
 }
 
 function bookmarkletCode() {
-  // Collects page text + tracking-looking links and opens PackTrack with them in the URL fragment
-  // (fragments never leave the browser, and window.open isn't blocked by the shop's CSP).
-  const src = `(()=>{const L=[...document.links].map(a=>a.href).filter(h=>/track|seuranta|sendung|parcel|shipment|lahetys|17track|aftership|parcelsapp/i.test(h)).slice(0,150);const p={url:location.href,title:document.title,text:(document.body.innerText||'').slice(0,60000)+'\\n'+L.join('\\n')};window.open(${JSON.stringify(appUrl())}+'#import='+encodeURIComponent(JSON.stringify(p)),'_blank');})()`;
-  return 'javascript:' + encodeURIComponent(src);
+  return 'javascript:' + encodeURIComponent(bookmarkletSource(appUrl()));
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const x = document.createElement('textarea');
+    x.value = text;
+    document.body.appendChild(x);
+    x.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { /* ignore */ }
+    x.remove();
+    return ok;
+  }
 }
 
 function initImport() {
@@ -362,11 +376,23 @@ function initImport() {
   $('#impParse').onclick = () => {
     const text = $('#impText').value.trim();
     if (!text) { toast('Paste an email or page first'); return; }
+    const page = parsePasted(text);
+    if (page) { parseAndPreview(page); return; }
     const isHtml = /<\/?(html|body|div|table|a)\b/i.test(text); // pasted HTML source works too
     parseAndPreview({ text: isHtml ? '' : text, html: isHtml ? text : '', from: $('#impFrom').value, subject: $('#impSubject').value });
   };
   $('#bookmarklet').href = bookmarkletCode();
   $('#bookmarklet').onclick = (e) => { e.preventDefault(); toast('Drag this button to your bookmarks bar'); };
+  $('#copyBookmarklet').onclick = async () => {
+    toast(await copyText(bookmarkletCode()) ? 'Bookmark code copied' : 'Could not copy – long-press the computer button below and copy its link instead', 4000);
+  };
+  $('#impPasteClip').onclick = async () => {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch { /* not allowed */ }
+    if (!text.trim()) { toast('Nothing to paste. Long-press the box and choose Paste instead.', 4000); $('#impText').focus(); return; }
+    $('#impText').value = text;
+    $('#impParse').click();
+  };
   $('#emailSyncBtn').onclick = async () => {
     const b = $('#emailSyncBtn');
     b.disabled = true;

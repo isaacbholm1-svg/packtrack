@@ -107,18 +107,25 @@
       <label>Email text
         <textarea id="impText" rows="8" placeholder="Paste here…"></textarea>
       </label>
-      <div class="row end"><button id="impParse" class="btn primary">Find packages</button></div>
+      <div class="row end"><button id="impPasteClip" class="btn">Paste from clipboard</button><button id="impParse" class="btn primary">Find packages</button></div>
     </div>
 
     <div data-ipane="bookmarklet" hidden>
-      <p>Store order pages need you to be logged in, so PackTrack can't fetch them itself. Instead, drag this button to your bookmarks bar:</p>
-      <p class="center"><a id="bookmarklet" class="btn primary bookmarklet" href="#">📦 Send to PackTrack</a></p>
-      <ol class="muted">
-        <li>Open an order or “track package” page in any shop.</li>
-        <li>Click <b>Send to PackTrack</b> in your bookmarks bar.</li>
-        <li>PackTrack opens with the packages it found on that page for you to confirm.</li>
+      <p>Store order pages need you to be logged in, so PackTrack can't open them itself. A bookmark can send the order page you're looking at to PackTrack instead.</p>
+
+      <h3>On iPhone or iPad</h3>
+      <ol class="steps">
+        <li><button type="button" id="copyBookmarklet" class="btn primary">Copy bookmark code</button></li>
+        <li>In Safari, open any page and tap <b>Share → Add Bookmark</b>, name it <b>Send to PackTrack</b>, tap <b>Save</b>.</li>
+        <li>Tap the <b>Bookmarks</b> button (📖) → <b>Edit</b> → tap <b>Send to PackTrack</b>. Clear the address and paste the code. Tap <b>Done</b>.</li>
+        <li>On a shop's order page in Safari, open <b>Bookmarks</b> and tap <b>Send to PackTrack</b>. It copies the order details.</li>
+        <li>Open PackTrack → <b>Take from email</b> → <b>Paste from clipboard</b>.</li>
       </ol>
-      <p class="muted">The page text is passed only to this PackTrack window on your computer.</p>
+
+      <h3>On a computer</h3>
+      <p>Drag this button to your bookmarks bar, then click it on a shop's order page:</p>
+      <p class="center"><a id="bookmarklet" class="btn primary bookmarklet" href="#">📦 Send to PackTrack</a></p>
+      <p class="muted small">The page is passed only to PackTrack on your own device. Nothing is saved until you confirm.</p>
     </div>
 
     <div data-ipane="email" hidden>

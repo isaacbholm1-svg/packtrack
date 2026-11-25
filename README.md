@@ -30,7 +30,7 @@ The workflow in `.github/workflows/pages.yml` runs the tests and publishes the `
 Open the page in Safari (or Chrome) and choose **Share → Add to Home Screen**. It opens full-screen with its own icon.
 
 - On iPhone, the home-screen app keeps **its own storage, separate from Safari**. Add your packages from the home-screen app (or move them with Export/Restore).
-- The bookmarklet opens results in Safari, not in the home-screen app. On the phone, use **Take from email → Paste email** instead.
+- The **Send to PackTrack** bookmark works on iPhone too. On a shop's order page it copies the order details, and you paste them in the app with **Take from email → Paste from clipboard**. Setup steps are in the app under **Take from email → Bookmark**.
 - Status is checked while the app is open; it doesn't send push notifications when closed.
 
 ## Live tracking
