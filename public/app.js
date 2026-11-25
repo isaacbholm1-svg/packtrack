@@ -1,11 +1,23 @@
+import { db } from './lib/db.js';
+import { carrierList, carrierName, detectCarrier, normalizeNumber } from './lib/carriers.js';
+import { STORES } from './lib/stores.js';
+import { extractShipments } from './lib/extract.js';
+import { getSettings, updateSettings } from './lib/settings.js';
+import { getProvider } from './lib/providers/index.js';
+import {
+  view, addMany, editShipment, refreshShipment, refreshAll, startPoller, syncEmailViaHelper,
+} from './lib/tracker.js';
+
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+const CARRIERS = carrierList();
+const STORE_OPTIONS = STORES.map((s) => ({ id: s.id, name: s.name }));
+
 const state = {
-  meta: null,
   shipments: [],
-  filter: localStorage.getItem('pt.filter') || 'active',
+  filter: (() => { try { return localStorage.getItem('pt.filter') || 'active'; } catch { return 'active'; } })(),
   store: '',
   q: '',
   openId: null,
@@ -15,18 +27,6 @@ const PROGRESS = {
   awaiting_tracking: 3, pending: 5, not_found: 8, info_received: 15, in_transit: 50, failed_attempt: 75,
   exception: 60, out_for_delivery: 85, available_for_pickup: 92, delivered: 100, expired: 100, unknown: 10,
 };
-
-async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    ...opts,
-    headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  if (res.status === 204) return null;
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.error || res.statusText);
-  return data;
-}
 
 function toast(msg, ms = 3000) {
   const t = $('#toast');
@@ -38,8 +38,7 @@ function toast(msg, ms = 3000) {
 
 function fmtDate(iso, withTime = true) {
   if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, withTime
+  return new Date(iso).toLocaleString(undefined, withTime
     ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
     : { weekday: 'short', day: 'numeric', month: 'short' });
 }
@@ -122,6 +121,7 @@ function optionList(items, selected, empty) {
 function renderDrawer() {
   const s = state.shipments.find((x) => x.id === state.openId);
   if (!s) { closeDrawer(); return; }
+  if ($('#drawerBody').contains(document.activeElement) && document.activeElement.matches('input, select')) return; // don't wipe edits in progress
   const title = s.label || s.trackingNumber || `Order ${s.orderNumber}`;
   $('#drawerBody').innerHTML = `
     <h2>${esc(title)}</h2>
@@ -140,7 +140,7 @@ function renderDrawer() {
     <div class="row">
       ${s.trackingUrl ? `<a class="btn" href="${esc(s.trackingUrl)}" target="_blank" rel="noopener">Open on carrier site ↗</a>` : ''}
       ${s.universalUrl ? `<a class="btn ghost" href="${esc(s.universalUrl)}" target="_blank" rel="noopener">17TRACK ↗</a>` : ''}
-      ${s.sourceUrl ? `<a class="btn ghost" href="${esc(s.sourceUrl)}" target="_blank" rel="noopener">Order page ↗</a>` : ''}
+      ${/^https?:\/\//i.test(s.sourceUrl || '') ? `<a class="btn ghost" href="${esc(s.sourceUrl)}" target="_blank" rel="noopener">Order page ↗</a>` : ''}
     </div>
 
     <h3>History</h3>
@@ -154,8 +154,8 @@ function renderDrawer() {
       <div class="edit-grid">
         <label>Name <input name="label" value="${esc(s.label || '')}"></label>
         <label>Tracking number <input name="trackingNumber" value="${esc(s.trackingNumber || '')}"></label>
-        <label>Carrier <select name="carrier">${optionList(state.meta.carriers, s.carrier, '—')}</select></label>
-        <label>Store <select name="store">${optionList(state.meta.stores, s.store, '—')}</select></label>
+        <label>Carrier <select name="carrier">${optionList(CARRIERS, s.carrier, '—')}</select></label>
+        <label>Store <select name="store">${optionList(STORE_OPTIONS, s.store, '—')}</select></label>
         <label>Order number <input name="orderNumber" value="${esc(s.orderNumber || '')}"></label>
       </div>
       <div class="row">
@@ -166,24 +166,20 @@ function renderDrawer() {
       </div>
     </form>`;
 
-  $('#editForm').onsubmit = async (e) => {
+  $('#editForm').onsubmit = (e) => {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.target));
     for (const k of Object.keys(f)) if (f[k] === '') f[k] = null;
-    await api(`/api/shipments/${s.id}`, { method: 'PATCH', body: f });
+    const before = s.trackingNumber;
+    const updated = editShipment(s.id, f);
     toast('Saved');
-    await load();
-    if (f.trackingNumber && f.trackingNumber !== s.trackingNumber) refreshOne(s.id);
+    if (updated.trackingNumber && updated.trackingNumber !== before) refreshShipment(s.id);
   };
-  $('#archiveBtn').onclick = async () => {
-    await api(`/api/shipments/${s.id}`, { method: 'PATCH', body: { archived: !s.archived } });
-    await load();
-  };
-  $('#deleteBtn').onclick = async () => {
+  $('#archiveBtn').onclick = () => editShipment(s.id, { archived: !s.archived });
+  $('#deleteBtn').onclick = () => {
     if (!confirm('Delete this package?')) return;
-    await api(`/api/shipments/${s.id}`, { method: 'DELETE' });
+    db.deleteShipment(s.id);
     closeDrawer();
-    await load();
   };
 }
 
@@ -199,7 +195,7 @@ function closeDrawer() {
 
 function renderProvider() {
   const chip = $('#providerChip');
-  const p = state.meta.provider;
+  const p = getProvider();
   chip.textContent = p ? `Live: ${p.name}` : 'No live tracking – add API key';
   chip.className = `chip ${p ? 'on' : 'off'}`;
 }
@@ -207,9 +203,8 @@ function renderProvider() {
 // ---------- data ----------
 
 let previous = new Map();
-async function load() {
-  const [meta, shipments] = await Promise.all([api('/api/meta'), api('/api/shipments')]);
-  state.meta = meta;
+function load() {
+  const shipments = db.listShipments().map(view);
   notifyChanges(shipments);
   state.shipments = shipments;
   renderProvider();
@@ -229,9 +224,11 @@ function notifyChanges(shipments) {
   previous = next;
 }
 
-async function refreshOne(id) {
-  await api(`/api/shipments/${id}/refresh`, { method: 'POST' });
-  await load();
+// Add items, then fetch status for the new ones.
+function addAndTrack(items, source) {
+  const results = addMany(items, source);
+  for (const r of results) if (r.created && r.shipment.trackingNumber) refreshShipment(r.shipment.id);
+  return results;
 }
 
 // ---------- add ----------
@@ -239,36 +236,36 @@ async function refreshOne(id) {
 function initAdd() {
   const form = $('#addForm');
   const dlg = $('#addDialog');
-  form.carrier.innerHTML = optionList(state.meta.carriers, '', 'Detect automatically');
-  form.store.innerHTML = optionList(state.meta.stores, '', '—');
+  form.carrier.innerHTML = optionList(CARRIERS, '', 'Detect automatically');
+  form.store.innerHTML = optionList(STORE_OPTIONS, '', '—');
 
-  let timer;
   form.numbers.oninput = () => {
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-      const lines = form.numbers.value.split(/\n/).map((l) => l.trim()).filter(Boolean).slice(0, 30);
-      const res = await Promise.all(lines.map((n) => api(`/api/detect?n=${encodeURIComponent(n)}`)));
-      $('#detectPreview').innerHTML = res.map((r) => r.carrier
-        ? `<div><span class="mono">${esc(r.trackingNumber)}</span> → ${esc(r.carrierName)}${r.strength === 'weak' ? ' (guess)' : ''}</div>`
-        : `<div class="bad"><span class="mono">${esc(r.trackingNumber)}</span> → unknown format, will still be tracked</div>`).join('');
-    }, 250);
+    const lines = form.numbers.value.split(/\n/).map((l) => l.trim()).filter(Boolean).slice(0, 30);
+    $('#detectPreview').innerHTML = lines.map((line) => {
+      const n = normalizeNumber(line);
+      const d = detectCarrier(n);
+      return d
+        ? `<div><span class="mono">${esc(n)}</span> → ${esc(carrierName(d.carrier))}${d.strength === 'weak' ? ' (guess)' : ''}</div>`
+        : `<div class="bad"><span class="mono">${esc(n)}</span> → unknown format, will still be tracked</div>`;
+    }).join('');
   };
 
-  dlg.addEventListener('close', async () => {
+  dlg.addEventListener('close', () => {
     const action = dlg.returnValue;
     dlg.returnValue = ''; // Esc keeps the previous value otherwise
     if (action !== 'add') return;
     const f = Object.fromEntries(new FormData(form));
     const numbers = f.numbers.split(/[\n,;]+/).map((n) => n.trim()).filter(Boolean);
     try {
-      const out = await api('/api/shipments', { method: 'POST', body: { numbers, label: f.label || null, carrier: f.carrier || null, store: f.store || null, orderNumber: f.orderNumber || null } });
-      const created = out.filter((s) => s.created).length;
+      const out = addAndTrack(numbers.map((trackingNumber) => ({
+        trackingNumber, label: f.label || null, carrier: f.carrier || null, store: f.store || null, orderNumber: f.orderNumber || null,
+      })), 'manual');
+      const created = out.filter((r) => r.created).length;
       toast(`${created} added${out.length - created ? `, ${out.length - created} already tracked` : ''}`);
       form.reset();
       $('#detectPreview').innerHTML = '';
       state.filter = 'active';
-      await load();
-      setTimeout(load, 4000); // first status arrives in the background
+      render();
     } catch (err) { toast(err.message); }
   });
 }
@@ -283,18 +280,17 @@ function showImportTab(name) {
 }
 
 function renderEmailStatus() {
-  const e = state.meta.email;
-  $('#emailStatus').innerHTML = !e.configured ? 'Not configured yet.'
-    : `Connected${e.mailbox ? ` · folder ${esc(e.mailbox)}` : ''}${e.lastSyncAt ? ` · last checked ${esc(relTime(e.lastSyncAt))}` : ' · not checked yet'}
-       ${e.lastError ? `<div class="err">${esc(e.lastError)}</div>` : ''}`;
-  $('#emailSyncBtn').disabled = !e.configured;
+  const url = getSettings().helperUrl;
+  $('#emailStatus').innerHTML = url
+    ? `Helper: <code>${esc(url)}</code>`
+    : 'No helper set up. Email sync needs the PackTrack helper running on your computer (see Settings).';
+  $('#emailSyncBtn').disabled = !url;
 }
 
-async function parseAndPreview(payload) {
+function parseAndPreview(payload) {
   const out = $('#impResult');
-  out.innerHTML = '<p class="muted">Looking for packages…</p>';
   let r;
-  try { r = await api('/api/import/parse', { method: 'POST', body: payload }); } catch (err) { out.innerHTML = `<p class="err">${esc(err.message)}</p>`; return; }
+  try { r = extractShipments(payload); } catch (err) { out.innerHTML = `<p class="err">${esc(err.message)}</p>`; return; }
 
   const header = `<div class="card-lite">
       Store: <b>${esc(r.store?.name || 'not recognised')}</b>
@@ -303,21 +299,24 @@ async function parseAndPreview(payload) {
     <label>Name for these packages <input id="impLabel" value="${esc(r.label || '')}"></label>`;
 
   if (!r.candidates.length) {
-    out.innerHTML = header + `<p class="muted">No tracking numbers found.${r.orderNumber ? ' You can add the order now and the tracking number will be filled in when a shipping email arrives (with email sync) or when you add it.' : ''}</p>
+    out.innerHTML = header + `<p class="muted">No tracking numbers found.${r.orderNumber ? ' You can add the order now and fill in the tracking number when the shipping email arrives.' : ''}</p>
       ${r.orderNumber ? '<div class="row end"><button class="btn primary" id="impAddOrder">Add order as “awaiting tracking”</button></div>' : ''}`;
     const b = $('#impAddOrder');
     if (b) b.onclick = () => commit([{ store: r.store?.id, orderNumber: r.orderNumber, label: $('#impLabel').value || null, sourceUrl: payload.url || null }]);
     return;
   }
 
-  out.innerHTML = header + r.candidates.map((c, i) => `<div class="cand">
-      <input type="checkbox" data-i="${i}" ${c.confidence === 'high' && !c.exists ? 'checked' : ''} aria-label="Import ${esc(c.trackingNumber)}">
+  out.innerHTML = header + r.candidates.map((c, i) => {
+    const exists = Boolean(db.findByTracking(c.trackingNumber));
+    return `<div class="cand">
+      <input type="checkbox" data-i="${i}" ${c.confidence === 'high' && !exists ? 'checked' : ''} aria-label="Import ${esc(c.trackingNumber)}">
       <div class="grow">
-        <div class="mono">${esc(c.trackingNumber)} ${c.exists ? '<span class="badge">already tracked</span>' : ''}</div>
+        <div class="mono">${esc(c.trackingNumber)} ${exists ? '<span class="badge">already tracked</span>' : ''}</div>
         <div class="muted small"><span class="badge ${esc(c.confidence)}">${esc(c.confidence)}</span> ${esc(c.reason)}</div>
       </div>
-      <select data-carrier="${i}" aria-label="Carrier">${optionList(state.meta.carriers, c.carrier)}</select>
-    </div>`).join('') + '<div class="row end"><button class="btn primary" id="impCommit">Add selected</button></div>';
+      <select data-carrier="${i}" aria-label="Carrier">${optionList(CARRIERS, c.carrier)}</select>
+    </div>`;
+  }).join('') + '<div class="row end"><button class="btn primary" id="impCommit">Add selected</button></div>';
 
   $('#impCommit').onclick = () => {
     const items = $$('#impResult input[type=checkbox]:checked').map((cb) => {
@@ -336,23 +335,24 @@ async function parseAndPreview(payload) {
   };
 }
 
-async function commit(items, source = 'paste') {
+function commit(items, source = 'paste') {
   try {
-    const out = await api('/api/shipments', { method: 'POST', body: { items, source } });
-    toast(`${out.filter((s) => s.created).length} added`);
+    const out = addAndTrack(items, source);
+    toast(`${out.filter((r) => r.created).length} added`);
     $('#importDialog').close();
     $('#impText').value = '';
     $('#impResult').innerHTML = '';
-    await load();
-    setTimeout(load, 4000);
   } catch (err) { toast(err.message); }
 }
 
+function appUrl() {
+  return location.href.replace(/#.*$/, '').replace(/index\.html$/, '');
+}
+
 function bookmarkletCode() {
-  const origin = location.origin;
   // Collects page text + tracking-looking links and opens PackTrack with them in the URL fragment
   // (fragments never leave the browser, and window.open isn't blocked by the shop's CSP).
-  const src = `(()=>{const L=[...document.links].map(a=>a.href).filter(h=>/track|seuranta|sendung|parcel|shipment|lahetys|17track|aftership|parcelsapp/i.test(h)).slice(0,150);const p={url:location.href,title:document.title,text:(document.body.innerText||'').slice(0,60000)+'\\n'+L.join('\\n')};window.open(${JSON.stringify(origin)}+'/#import='+encodeURIComponent(JSON.stringify(p)),'_blank');})()`;
+  const src = `(()=>{const L=[...document.links].map(a=>a.href).filter(h=>/track|seuranta|sendung|parcel|shipment|lahetys|17track|aftership|parcelsapp/i.test(h)).slice(0,150);const p={url:location.href,title:document.title,text:(document.body.innerText||'').slice(0,60000)+'\\n'+L.join('\\n')};window.open(${JSON.stringify(appUrl())}+'#import='+encodeURIComponent(JSON.stringify(p)),'_blank');})()`;
   return 'javascript:' + encodeURIComponent(src);
 }
 
@@ -362,8 +362,7 @@ function initImport() {
   $('#impParse').onclick = () => {
     const text = $('#impText').value.trim();
     if (!text) { toast('Paste an email or page first'); return; }
-    // Pasted HTML source works too.
-    const isHtml = /<\/?(html|body|div|table|a)\b/i.test(text);
+    const isHtml = /<\/?(html|body|div|table|a)\b/i.test(text); // pasted HTML source works too
     parseAndPreview({ text: isHtml ? '' : text, html: isHtml ? text : '', from: $('#impFrom').value, subject: $('#impSubject').value });
   };
   $('#bookmarklet').href = bookmarkletCode();
@@ -373,15 +372,13 @@ function initImport() {
     b.disabled = true;
     b.textContent = 'Checking…';
     try {
-      const r = await api('/api/email/sync', { method: 'POST' });
+      const r = await syncEmailViaHelper();
       $('#impResult').innerHTML = `<div class="card-lite">Scanned ${r.scanned} new message(s): ${r.added} package(s) added, ${r.updated} updated.</div>`;
-      await load();
     } catch (err) {
       $('#impResult').innerHTML = `<p class="err">${esc(err.message)}</p>`;
     } finally {
       b.disabled = false;
       b.textContent = 'Check mailbox now';
-      renderEmailStatus();
     }
   };
   dlg.querySelector('[data-close]').onclick = () => dlg.close();
@@ -391,7 +388,7 @@ function initImport() {
 function handleIncomingImport() {
   const m = /^#import=(.*)$/s.exec(location.hash);
   if (!m) return;
-  history.replaceState(null, '', location.pathname);
+  history.replaceState(null, '', location.pathname + location.search);
   let payload;
   try { payload = JSON.parse(decodeURIComponent(m[1])); } catch { toast('Could not read the page data'); return; }
   showImportTab('paste');
@@ -402,15 +399,14 @@ function handleIncomingImport() {
 
 // ---------- settings ----------
 
-async function openSettings() {
-  const s = await api('/api/settings');
+function openSettings() {
+  const s = getSettings();
   const form = $('#settingsForm');
-  for (const el of form.elements) {
-    if (!el.name || !(el.name in s)) continue;
-    const v = s[el.name];
-    if (v && typeof v === 'object') { el.value = ''; el.placeholder = v.set ? '•••••••• (saved)' : 'not set'; } else el.value = v;
-  }
+  for (const el of form.elements) if (el.name && el.name in s) el.value = s[el.name];
   updateNotifyBtn();
+  $('#storageNote').textContent = db.persistent
+    ? 'Your packages and settings are saved in this browser on this device. Use Export to back them up or move them to another device.'
+    : 'This browser is not allowing storage (private mode?), so nothing will be kept after you close the page.';
   $('#settingsDialog').showModal();
 }
 
@@ -421,38 +417,61 @@ function updateNotifyBtn() {
   b.disabled = Notification.permission !== 'default';
 }
 
+function exportBackup() {
+  const blob = new Blob([JSON.stringify(db.exportData(), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `packtrack-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 function initSettings() {
   const dlg = $('#settingsDialog');
-  dlg.addEventListener('close', async () => {
+  dlg.addEventListener('close', () => {
     const action = dlg.returnValue;
     dlg.returnValue = '';
     if (action !== 'save') return;
-    const body = Object.fromEntries(new FormData($('#settingsForm')));
-    try {
-      await api('/api/settings', { method: 'PUT', body });
-      toast('Settings saved');
-      await load();
-      api('/api/refresh', { method: 'POST' }).then(() => setTimeout(load, 5000));
-    } catch (err) { toast(err.message); }
+    updateSettings(Object.fromEntries(new FormData($('#settingsForm'))));
+    toast('Settings saved');
+    renderProvider();
+    refreshAll({ onlyStale: true });
   });
   $('#notifyBtn').onclick = async () => { await Notification.requestPermission(); updateNotifyBtn(); };
+  $('#exportBtn').onclick = exportBackup;
+  $('#importFile').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const n = db.importData(JSON.parse(await file.text()));
+      toast(`${n} package(s) restored`);
+    } catch (err) { toast(err.message); }
+    e.target.value = '';
+  };
 }
 
 // ---------- wiring ----------
 
-async function main() {
-  await load();
-  $('#storeFilter').innerHTML = optionList(state.meta.stores, '', 'All stores');
+function main() {
+  $('#storeFilter').innerHTML = optionList(STORE_OPTIONS, '', 'All stores');
   initAdd();
   initImport();
   initSettings();
+  load();
+  db.onChange(load);
 
-  for (const t of $$('.toolbar .tab')) t.onclick = () => { state.filter = t.dataset.filter; localStorage.setItem('pt.filter', state.filter); render(); };
+  for (const t of $$('.toolbar .tab')) {
+    t.onclick = () => {
+      state.filter = t.dataset.filter;
+      try { localStorage.setItem('pt.filter', state.filter); } catch { /* ignore */ }
+      render();
+    };
+  }
   $('#search').oninput = (e) => { state.q = e.target.value; render(); };
   $('#storeFilter').onchange = (e) => { state.store = e.target.value; render(); };
   $('#list').onclick = (e) => { const c = e.target.closest('.card'); if (c) openDrawer(c.dataset.id); };
   $('#drawerClose').onclick = closeDrawer;
-  $('#drawerRefresh').onclick = async () => { if (state.openId) { toast('Refreshing…', 1500); await refreshOne(state.openId); } };
+  $('#drawerRefresh').onclick = async () => { if (state.openId) { toast('Refreshing…', 1500); await refreshShipment(state.openId); } };
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#drawer').hidden && !document.querySelector('dialog[open]')) closeDrawer(); });
 
   $('#addBtn').onclick = () => $('#addDialog').showModal();
@@ -467,17 +486,20 @@ async function main() {
     if (t.dataset.open === 'settingsDialog') openSettings();
     else { if (t.dataset.open === 'importDialog') showImportTab('paste'); $(`#${t.dataset.open}`).showModal(); }
   });
-  $('#refreshAllBtn').onclick = async () => {
-    if (!state.meta.provider) { openSettings(); return; }
-    await api('/api/refresh', { method: 'POST' });
+  $('#refreshAllBtn').onclick = () => {
+    if (!getProvider()) { openSettings(); return; }
     toast('Refreshing all active packages…');
-    setTimeout(load, 3000);
-    setTimeout(load, 10000);
+    refreshAll();
   };
 
   handleIncomingImport();
   window.addEventListener('hashchange', handleIncomingImport);
-  setInterval(load, 60e3);
+  setInterval(render, 60e3); // keep "x min ago" fresh
+  startPoller();
 }
 
-main().catch((err) => { document.body.insertAdjacentHTML('beforeend', `<p class="err center">Failed to start: ${esc(err.message)}</p>`); });
+try {
+  main();
+} catch (err) {
+  document.body.insertAdjacentHTML('beforeend', `<p class="err center">Failed to start: ${esc(err.message)}</p>`);
+}

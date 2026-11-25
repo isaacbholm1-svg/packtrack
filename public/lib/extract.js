@@ -5,7 +5,7 @@
 
 import {
   detectCarrier, normalizeNumber, strengthRank, carrierFromHost, AGGREGATOR_HOSTS,
-} from '../carriers.js';
+} from './carriers.js';
 import { detectStore } from './stores.js';
 
 // "Tracking number" in the languages PackTrack users are likely to receive mail in.

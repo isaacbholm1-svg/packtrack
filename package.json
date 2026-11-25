@@ -1,13 +1,14 @@
 {
   "name": "packtrack",
   "version": "0.1.0",
-  "description": "Track many packages across many carriers, and import shipments from store emails and order pages (Amazon, Temu, Bambu Lab, Verkkokauppa.com, AliExpress and more).",
+  "description": "Track many packages across many carriers, and import shipments from store emails and order pages. Runs in the browser (GitHub Pages); optional local helper for email sync.",
   "type": "module",
-  "main": "server/index.js",
+  "main": "helper/index.js",
   "scripts": {
-    "start": "node --env-file-if-exists=.env server/index.js",
-    "dev": "node --env-file-if-exists=.env --watch server/index.js",
-    "test": "node --test test/*.test.js"
+    "start": "node --env-file-if-exists=.env helper/index.js",
+    "dev": "node --env-file-if-exists=.env --watch helper/index.js",
+    "test": "node --test test/*.test.js",
+    "serve": "npx --yes serve@14 public"
   },
   "engines": {
     "node": ">=22.9"

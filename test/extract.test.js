@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractShipments } from '../server/import/extract.js';
+import { extractShipments } from '../public/lib/extract.js';
 
 const numbers = (r) => r.candidates.map((c) => c.trackingNumber);
 

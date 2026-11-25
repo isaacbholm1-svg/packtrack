@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectCarrier, isValidS10, normalizeNumber, carrierFromHost, trackingUrl } from '../server/carriers.js';
+import { detectCarrier, isValidS10, normalizeNumber, carrierFromHost, trackingUrl } from '../public/lib/carriers.js';
 
 test('normalizes spaces, dashes and case', () => {
   assert.equal(normalizeNumber(' 1z 999 aa1-01234 56784 '), '1Z999AA10123456784');

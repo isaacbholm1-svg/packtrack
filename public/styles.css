@@ -60,6 +60,9 @@ h3 { margin: 22px 0 6px; font-size: 1rem; }
   position: sticky; top: 0; z-index: 5;
   display: flex; align-items: center; gap: 8px;
   padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--border);
+  padding-top: max(10px, env(safe-area-inset-top));
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.1rem; }
 .chip { font-size: .8rem; padding: 3px 10px; border-radius: 999px; background: var(--neutral-bg); color: var(--muted); cursor: pointer; white-space: nowrap; }
@@ -135,7 +138,7 @@ label input, label select, label textarea { margin-top: 4px; }
   border-left: 1px solid var(--border); z-index: 10; display: flex; flex-direction: column;
   box-shadow: -8px 0 30px rgba(0, 0, 0, .12);
 }
-.drawer-head { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.drawer-head { display: flex; gap: 6px; padding: max(10px, env(safe-area-inset-top)) 12px 10px; border-bottom: 1px solid var(--border); }
 .drawer-body { padding: 16px 20px 40px; overflow: auto; }
 .drawer-body h2 { margin-bottom: 4px; overflow-wrap: anywhere; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 14px 0; font-size: .9rem; }
@@ -178,7 +181,7 @@ dialog::backdrop { background: rgba(10, 12, 16, .45); }
 }
 
 @media (max-width: 640px) {
-  .topbar { padding: 8px 12px; gap: 4px; }
+  .topbar { padding: max(8px, env(safe-area-inset-top)) 12px 8px; gap: 4px; }
   .topbar .chip { display: none; }
   .brand span { display: none; }
   #importBtn, #refreshAllBtn { padding: 7px 8px; }
@@ -188,3 +191,4 @@ dialog::backdrop { background: rgba(10, 12, 16, .45); }
   .card { grid-template-columns: 1fr; }
   .card .right { align-items: flex-start; flex-direction: row; }
 }
+.file-btn { margin: 0; font-weight: 400; }

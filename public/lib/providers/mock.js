@@ -1,7 +1,15 @@
 // Demo provider: deterministic fake progress so the app can be tried without an API key.
 // Every event is labelled "(demo)" so it can't be confused with real tracking data.
 
-import crypto from 'node:crypto';
+// Small deterministic hash (no crypto needed for fake data).
+function hashBytes(str) {
+  let h1 = 0x811c9dc5, h2 = 0x01000193;
+  for (const ch of str) {
+    h1 = Math.imul(h1 ^ ch.charCodeAt(0), 16777619);
+    h2 = Math.imul(h2 + ch.charCodeAt(0), 2654435761);
+  }
+  return [h1 >>> 24, (h2 >>> 16) & 255];
+}
 
 const STEPS = [
   { status: 'info_received', text: 'Shipping label created', loc: 'Origin facility' },
@@ -16,7 +24,7 @@ export default {
   id: 'mock',
   name: 'Demo data (no API key)',
   async track(shipment) {
-    const h = crypto.createHash('sha1').update(shipment.trackingNumber).digest();
+    const h = hashBytes(shipment.trackingNumber);
     const start = new Date(shipment.createdAt).getTime() - (h[0] % 72) * 3600e3;
     const hoursPerStep = 6 + (h[1] % 18);
     const elapsed = (Date.now() - start) / 3600e3;

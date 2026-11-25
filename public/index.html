@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="PackTrack">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <title>PackTrack</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232563eb'/><path d='M8 11l8-4 8 4v10l-8 4-8-4z' fill='none' stroke='white' stroke-width='2' stroke-linejoin='round'/><path d='M8 11l8 4 8-4M16 15v10' fill='none' stroke='white' stroke-width='2' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="styles.css">
@@ -38,7 +45,7 @@
     <section id="list" class="list" aria-live="polite"></section>
     <section id="empty" class="empty" hidden>
       <h2>No packages here yet</h2>
-      <p>Add tracking numbers by hand, paste a shipping email, or connect your mailbox so orders from Amazon, Temu, Bambu Lab, Verkkokauppa.com and others show up automatically.</p>
+      <p>Add tracking numbers by hand, or paste a shipping email or order page from Amazon, Temu, Bambu Lab, Verkkokauppa.com and others, and PackTrack finds the packages in it.</p>
       <div class="row center">
         <button class="btn primary" data-open="addDialog">+ Add tracking numbers</button>
         <button class="btn" data-open="importDialog">Import from email or page</button>
@@ -115,8 +122,12 @@
     </div>
 
     <div data-ipane="email" hidden>
-      <p>Connect a mailbox over IMAP and PackTrack checks it regularly for shipping emails from stores and carriers, adding new packages automatically. It only reads mail and never changes your mailbox.</p>
-      <p class="muted">Gmail: turn on 2-step verification and create an <b>app password</b>, then use host <code>imap.gmail.com</code>. Outlook: <code>outlook.office365.com</code>. Configure it in <a href="#" data-open="settingsDialog">Settings</a>.</p>
+      <p>A web page can't read your mailbox by itself. To pick up shipping emails automatically, run the small <b>PackTrack helper</b> on your computer. It reads the mailbox (read-only) and hands the packages it finds to this page.</p>
+      <ol class="muted">
+        <li>Download the project, then put your mail settings in <code>.env</code> (see <code>.env.example</code>; Gmail needs an <b>app password</b>).</li>
+        <li>Run <code>npm install</code> and <code>npm start</code>.</li>
+        <li>Enter the helper address (usually <code>http://localhost:3000</code>) in <a href="#" data-open="settingsDialog">Settings</a>.</li>
+      </ol>
       <div id="emailStatus" class="card-lite"></div>
       <div class="row end"><button id="emailSyncBtn" class="btn primary">Check mailbox now</button></div>
     </div>
@@ -148,20 +159,25 @@
         <label>17TRACK API key <small><a href="https://api.17track.net" target="_blank" rel="noopener">get one</a></small><input name="seventeenTrackKey" type="password" autocomplete="off"></label>
         <label>Ship24 API key <small><a href="https://www.ship24.com/tracking-api" target="_blank" rel="noopener">get one</a></small><input name="ship24Key" type="password" autocomplete="off"></label>
         <label>AfterShip API key <small><a href="https://www.aftership.com/tracking-api" target="_blank" rel="noopener">get one</a></small><input name="aftershipKey" type="password" autocomplete="off"></label>
-        <label>Check every (minutes) <input name="pollMinutes" type="number" min="0" step="5"></label>
+        <label>Check every (minutes) <small>while the page is open</small><input name="pollMinutes" type="number" min="0" step="5"></label>
       </div>
 
-      <h3>Email sync (IMAP)</h3>
-      <div class="grid2">
-        <label>IMAP server <input name="imapHost" placeholder="imap.gmail.com"></label>
-        <label>Port <input name="imapPort" type="number"></label>
-        <label>Email / username <input name="imapUser" autocomplete="off"></label>
-        <label>Password / app password <input name="imapPass" type="password" autocomplete="off"></label>
-        <label>Folder <input name="imapMailbox" placeholder="INBOX"></label>
-        <label>Look back (days) on first sync <input name="imapSinceDays" type="number" min="1"></label>
-        <label>Check mail every (minutes) <input name="imapMinutes" type="number" min="0"></label>
+      <label>Proxy URL <small>optional, only needed if the browser blocks the tracking API (see README)</small>
+        <input name="proxyUrl" placeholder="https://packtrack-proxy.you.workers.dev" autocomplete="off">
+      </label>
+
+      <h3>Email sync helper</h3>
+      <label>Helper address <small>optional, the PackTrack helper running on your computer</small>
+        <input name="helperUrl" placeholder="http://localhost:3000" autocomplete="off">
+      </label>
+
+      <h3>Your data</h3>
+      <p class="muted small" id="storageNote"></p>
+      <p class="muted small">API keys are kept in this browser only. They're sent only to the tracking service (through your proxy if you set one).</p>
+      <div class="row">
+        <button type="button" id="exportBtn" class="btn">Export backup</button>
+        <label class="btn file-btn">Restore backup… <input type="file" id="importFile" accept="application/json,.json" hidden></label>
       </div>
-      <p class="muted small">Keys and passwords are stored in <code>data/db.json</code> on this computer. Leave a password field empty to keep the saved value.</p>
 
       <h3>Notifications</h3>
       <button type="button" id="notifyBtn" class="btn">Enable browser notifications</button>
