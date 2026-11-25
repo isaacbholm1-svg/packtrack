@@ -1,6 +1,6 @@
 import { db } from './lib/db.js';
 import { carrierList, carrierName, detectCarrier, normalizeNumber } from './lib/carriers.js';
-import { STORES, storeValue, storeName, storeLogoUrl } from './lib/stores.js';
+import { STORES, CATEGORIES, storeValue, storeName, storeLogoUrl } from './lib/stores.js';
 import { gmailState, startSignIn, finishSignIn, syncGmail, disconnectGmail } from './lib/gmail.js';
 import { extractShipments } from './lib/extract.js';
 import { bookmarkletSource, parsePasted } from './lib/bookmarklet.js';
@@ -129,6 +129,7 @@ function storeInputHtml(value) {
   return `<span class="store-input">
     <img class="store-logo" alt="" referrerpolicy="no-referrer" ${logo ? `src="${esc(logo)}"` : 'hidden'} onerror="this.hidden=true">
     <input name="store" list="storeList" value="${esc(storeName(value) || '')}" placeholder="Type a store…" autocomplete="off" autocapitalize="words">
+    <button type="button" class="btn ghost browse-stores" title="Browse stores" aria-label="Browse stores">☰ Stores</button>
   </span>`;
 }
 
@@ -140,6 +141,48 @@ function wireStoreInput(root) {
     if (!url) { img.hidden = true; img.removeAttribute('src'); return; }
     if (img.getAttribute('src') !== url) img.src = url;
     img.hidden = false;
+  });
+}
+
+// ---------- store picker ----------
+
+let pickerTarget = null;
+
+function renderStoreGrid() {
+  const q = $('#storeSearch').value.trim().toLowerCase();
+  const hits = STORES.filter((st) => !q || st.name.toLowerCase().includes(q) || st.domains.some((d) => d.includes(q)));
+  const groups = Object.entries(CATEGORIES)
+    .map(([cat, title]) => [title, hits.filter((st) => st.category === cat).sort((a, b) => a.name.localeCompare(b.name))])
+    .filter(([, list]) => list.length);
+  $('#storeGrid').innerHTML = groups.length
+    ? groups.map(([title, list]) => `<h3>${esc(title)} <span class="count">${list.length}</span></h3>
+        <div class="tiles">${list.map((st) => `<button type="button" class="store-tile" data-store="${esc(st.id)}">
+          ${logoImg(storeLogoUrl(st.id), 'tile-logo')}<span>${esc(st.name)}</span></button>`).join('')}</div>`).join('')
+    : `<p class="muted">No store called “${esc(q)}” in the list. Just type it in the store box, it works for any shop.</p>`;
+}
+
+function openStorePicker(input) {
+  pickerTarget = input;
+  $('#storeSearch').value = '';
+  renderStoreGrid();
+  $('#storePicker').showModal();
+  $('#storeGrid').scrollTop = 0;
+}
+
+function initStorePicker() {
+  $('#storeSearch').placeholder = `Search ${STORES.length} stores…`;
+  $('#storeSearch').oninput = renderStoreGrid;
+  $('#storePickerClose').onclick = () => $('#storePicker').close();
+  $('#storeGrid').onclick = (e) => {
+    const tile = e.target.closest('.store-tile');
+    if (!tile || !pickerTarget) return;
+    pickerTarget.value = storeName(tile.dataset.store);
+    pickerTarget.dispatchEvent(new Event('input', { bubbles: true }));
+    $('#storePicker').close();
+  };
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.browse-stores');
+    if (b) openStorePicker(b.parentElement.querySelector('input[name=store]'));
   });
 }
 
@@ -602,6 +645,7 @@ function main() {
   initAdd();
   initImport();
   initSettings();
+  initStorePicker();
   load();
   db.onChange(load);
 
