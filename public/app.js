@@ -31,12 +31,18 @@ const PROGRESS = {
   exception: 60, out_for_delivery: 85, available_for_pickup: 92, delivered: 100, expired: 100, unknown: 10,
 };
 
-function toast(msg, ms = 3000) {
+function toast(msg, ms = 3000, action = null) {
   const t = $('#toast');
-  t.textContent = msg;
+  const b = $('#toastAction');
+  $('#toastText').textContent = msg;
+  b.hidden = !action;
+  if (action) {
+    b.textContent = action.label;
+    b.onclick = () => { t.hidden = true; action.run(); };
+  }
   t.hidden = false;
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { t.hidden = true; }, ms);
+  toast.timer = setTimeout(() => { t.hidden = true; }, action ? Math.max(ms, 6000) : ms);
 }
 
 function fmtDate(iso, withTime = true) {
@@ -306,8 +312,87 @@ function closeDrawer() {
 function renderProvider() {
   const chip = $('#providerChip');
   const p = getProvider();
-  chip.textContent = p ? `Live: ${p.name}` : 'No live tracking – add API key';
+  chip.textContent = p ? `Live: ${p.name}` : 'Live tracking off';
   chip.className = `chip ${p ? 'on' : 'off'}`;
+  $('#setupBanner').hidden = Boolean(p) || getSettings().provider === 'none';
+}
+
+// ---------- quick add: one box for numbers or whole emails ----------
+
+const looksLikeNumber = (line) => /^[A-Za-z0-9][A-Za-z0-9 .-]{5,40}$/.test(line) && /\d{4,}/.test(line) && normalizeNumber(line).length >= 8;
+
+function finishQuickAdd(results, storeLabel) {
+  const created = results.filter((r) => r.created);
+  $('#quickText').value = '';
+  state.filter = 'active';
+  render();
+  if (!created.length) { toast('Already tracking that'); return; }
+  const msg = `Added ${created.length} package${created.length > 1 ? 's' : ''}${storeLabel ? ` from ${storeLabel}` : ''}`;
+  toast(msg, 6000, { label: 'Undo', run: () => { for (const r of created) db.deleteShipment(r.shipment.id); } });
+}
+
+function quickAdd(raw) {
+  const text = String(raw || '').trim();
+  if (!text) { toast('Paste a tracking number or an email first'); $('#quickText').focus(); return; }
+  const page = parsePasted(text);
+  const lines = text.split(/[\n,;]+/).map((l) => l.trim()).filter(Boolean);
+  try {
+    if (!page && lines.length <= 50 && lines.every(looksLikeNumber)) {
+      finishQuickAdd(addAndTrack(lines.map((trackingNumber) => ({ trackingNumber })), 'manual'));
+      return;
+    }
+    const isHtml = /<\/?(html|body|div|table|a)\b/i.test(text);
+    const payload = page || { text: isHtml ? '' : text, html: isHtml ? text : '' };
+    const r = extractShipments(payload);
+    const sure = r.candidates.filter((c) => c.confidence === 'high');
+    if (sure.length) {
+      finishQuickAdd(addAndTrack(sure.map((c) => ({
+        trackingNumber: c.trackingNumber, carrier: c.carrier, store: r.store?.id || null,
+        orderNumber: r.orderNumber, label: r.label, sourceUrl: payload.url || null,
+      })), page ? 'browser' : 'paste'), r.store?.name);
+      return;
+    }
+    if (r.candidates.length || r.orderNumber) {
+      // Not sure enough to add on its own: let the user pick.
+      showImportTab('paste');
+      $('#importDialog').showModal();
+      $('#impText').value = text;
+      parseAndPreview(payload);
+      $('#quickText').value = '';
+      return;
+    }
+    toast("Couldn't find a tracking number in that.", 4000);
+  } catch (err) { toast(err.message); }
+}
+
+async function pasteFromClipboard() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text.trim()) return text;
+  } catch { /* not allowed */ }
+  return null;
+}
+
+function initQuickAdd() {
+  $('#quickAdd').onclick = () => quickAdd($('#quickText').value);
+  $('#quickPaste').onclick = async () => {
+    const text = await pasteFromClipboard();
+    if (!text) { toast('Long-press the box and tap Paste', 4000); $('#quickText').focus(); return; }
+    $('#quickText').value = text;
+    quickAdd(text);
+  };
+  $('#quickText').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    const v = e.target.value;
+    // Ctrl/Cmd+Enter always adds; plain Enter adds when the box holds a single tracking number.
+    if (e.metaKey || e.ctrlKey || (!v.includes('\n') && looksLikeNumber(v.trim()))) { e.preventDefault(); quickAdd(v); }
+  });
+  $('#demoBtn').onclick = () => {
+    updateSettings({ provider: 'mock' });
+    renderProvider();
+    refreshAll();
+    toast('Demo is on: the progress is made up. Turn on real tracking in Settings.', 5000);
+  };
 }
 
 // ---------- data ----------
@@ -402,15 +487,60 @@ function renderEmailStatus() {
 
   const g = gmailState();
   $('#gmailStatus').innerHTML = !g.configured
-    ? 'Not set up yet. Follow the one-time setup below.'
-    : !g.connected ? 'Ready. Tap <b>Connect Gmail</b> to sign in.'
-      : `Connected${g.lastSyncAt ? ` · last checked ${esc(relTime(g.lastSyncAt))}` : ''}${g.lastError ? `<div class="err">${esc(g.lastError)}</div>` : ''}`;
+    ? '<b>Gmail isn\'t set up yet.</b> Do the steps below once, then PackTrack finds your packages by itself.'
+    : !g.connected ? 'Almost there: tap <b>Connect Gmail</b> and sign in.'
+      : `✓ Gmail connected${g.lastSyncAt ? ` · last checked ${esc(relTime(g.lastSyncAt))}` : ''}${g.lastError ? `<div class="err">${esc(g.lastError)}</div>` : ''}`;
   $('#gmailSyncBtn').textContent = !g.connected ? 'Connect Gmail' : 'Check Gmail now';
-  $('#gmailSyncBtn').disabled = !g.configured;
+  $('#gmailSyncBtn').hidden = !g.configured;
   $('#gmailDisconnect').hidden = !g.connected;
-  $('#gmailSetup').open = !g.configured;
   $('#gmailOrigin').textContent = location.origin;
   $('#gmailRedirect').textContent = redirectUrl();
+  renderWizard();
+}
+
+// ---- Gmail setup checklist ----
+const WIZ_KEY = 'pt.gmailSteps';
+function wizardDone() {
+  try { return new Set(JSON.parse(localStorage.getItem(WIZ_KEY) || '[]')); } catch { return new Set(); }
+}
+function setStepDone(step, done) {
+  const set = wizardDone();
+  if (done) set.add(step); else set.delete(step);
+  try { localStorage.setItem(WIZ_KEY, JSON.stringify([...set])); } catch { /* ignore */ }
+  renderWizard();
+}
+function renderWizard() {
+  const g = gmailState();
+  const done = wizardDone();
+  if (g.configured) done.add('6');
+  const steps = $$('#gmailWizard li[data-step]');
+  for (const li of steps) {
+    const on = done.has(li.dataset.step);
+    li.classList.toggle('done', on);
+    li.querySelector('input[type=checkbox]').checked = on;
+  }
+  const next = steps.find((li) => !done.has(li.dataset.step));
+  for (const li of steps) li.classList.toggle('next', li === next);
+  $('#wizardProgress').textContent = `${steps.filter((li) => done.has(li.dataset.step)).length} of ${steps.length} done`;
+  $('#gmailWizard').hidden = g.connected;
+  if (document.activeElement !== $('#wizardClientId')) $('#wizardClientId').value = getSettings().googleClientId || '';
+}
+function initWizard() {
+  for (const li of $$('#gmailWizard li[data-step]')) {
+    const step = li.dataset.step;
+    li.querySelector('input[type=checkbox]').onchange = (e) => setStepDone(step, e.target.checked);
+    const link = li.querySelector('a.btn');
+    if (link) link.addEventListener('click', () => setTimeout(() => setStepDone(step, true), 300));
+  }
+  $('#wizardConnect').onclick = () => {
+    const id = $('#wizardClientId').value.trim();
+    if (!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(id)) {
+      toast('That doesn\'t look right. The Client ID ends in .apps.googleusercontent.com', 5000);
+      return;
+    }
+    updateSettings({ googleClientId: id });
+    startSignIn(redirectUrl());
+  };
 }
 
 // The address Google sends you back to; must match the one in your Google client.
@@ -555,12 +685,16 @@ function initImport() {
   $('#bookmarklet').href = bookmarkletCode();
   $('#bookmarklet').onclick = (e) => { e.preventDefault(); toast('Drag this button to your bookmarks bar'); };
   $('#copyBookmarklet').onclick = async () => {
-    toast(await copyText(bookmarkletCode()) ? 'Bookmark code copied' : 'Could not copy – long-press the computer button below and copy its link instead', 4000);
+    toast(await copyText(bookmarkletCode()) ? 'Copied! Now do step 2.' : 'Could not copy', 4000);
   };
+  // Show the bookmark steps for this device first; the other device's steps go in "On another device?".
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
+  const other = $(`[data-device="${ios ? 'desktop' : 'ios'}"]`);
+  $('#otherDevice').appendChild(other);
+  $('#otherDeviceLabel').textContent = ios ? 'On a computer?' : 'On iPhone or iPad?';
   $('#impPasteClip').onclick = async () => {
-    let text = '';
-    try { text = await navigator.clipboard.readText(); } catch { /* not allowed */ }
-    if (!text.trim()) { toast('Nothing to paste. Long-press the box and choose Paste instead.', 4000); $('#impText').focus(); return; }
+    const text = await pasteFromClipboard();
+    if (!text) { toast('Long-press the box and tap Paste', 4000); $('#impText').focus(); return; }
     $('#impText').value = text;
     $('#impParse').click();
   };
@@ -580,7 +714,7 @@ function initImport() {
   };
   $('#gmailSyncBtn').onclick = () => {
     const g = gmailState();
-    if (!g.configured) { toast('Add your Google client ID in Settings first'); return; }
+    if (!g.configured) { toast('Do the setup steps first'); return; }
     if (!g.tokenValid) { startSignIn(redirectUrl()); return; }
     $('#gmailSyncBtn').disabled = true;
     $('#gmailSyncBtn').textContent = 'Checking…';
@@ -612,10 +746,34 @@ function handleIncomingImport() {
 
 // ---------- settings ----------
 
+const KEY_FIELD = { '17track': 'seventeenTrackKey', ship24: 'ship24Key', aftership: 'aftershipKey' };
+const SERVICE_HELP = {
+  '17track': 'Free key: sign up at <a href="https://api.17track.net" target="_blank" rel="noopener">api.17track.net</a>, then copy the API key from your dashboard and paste it above.',
+  ship24: 'Free key: sign up at <a href="https://www.ship24.com/tracking-api" target="_blank" rel="noopener">ship24.com</a>, then copy the API key from your dashboard and paste it above.',
+  aftership: 'Free key: sign up at <a href="https://www.aftership.com/tracking-api" target="_blank" rel="noopener">aftership.com</a>, then copy an API key from Settings → API keys and paste it above.',
+  mock: 'Shows made-up progress so you can try PackTrack. Not real tracking.',
+  none: 'Packages are still saved, and each one has a link to the carrier\'s own tracking page.',
+};
+let pendingKeys = {};
+
+function updateServiceUi() {
+  const form = $('#settingsForm');
+  const choice = form.serviceChoice.value;
+  form.serviceKey.closest('label').hidden = !KEY_FIELD[choice];
+  $('#serviceHelp').innerHTML = SERVICE_HELP[choice] || '';
+}
+
 function openSettings() {
   const s = getSettings();
   const form = $('#settingsForm');
   for (const el of form.elements) if (el.name && el.name in s) el.value = s[el.name];
+  pendingKeys = Object.fromEntries(Object.entries(KEY_FIELD).map(([svc, field]) => [svc, s[field] || '']));
+  const choice = KEY_FIELD[s.provider] || ['mock', 'none'].includes(s.provider) ? s.provider
+    : Object.keys(KEY_FIELD).find((svc) => pendingKeys[svc]) || '17track';
+  form.serviceChoice.value = choice;
+  form.serviceKey.value = pendingKeys[choice] || '';
+  form.serviceChoice.dataset.prev = choice;
+  updateServiceUi();
   updateNotifyBtn();
   $('#storageNote').textContent = db.persistent
     ? 'Your packages and settings are saved in this browser on this device. Use Export to back them up or move them to another device.'
@@ -626,7 +784,7 @@ function openSettings() {
 function updateNotifyBtn() {
   const b = $('#notifyBtn');
   if (!('Notification' in window)) { b.disabled = true; b.textContent = 'Notifications not supported'; return; }
-  b.textContent = Notification.permission === 'granted' ? 'Notifications enabled ✓' : 'Enable browser notifications';
+  b.textContent = Notification.permission === 'granted' ? 'Notifications on ✓' : 'Enable notifications';
   b.disabled = Notification.permission !== 'default';
 }
 
@@ -645,12 +803,26 @@ function initSettings() {
     const action = dlg.returnValue;
     dlg.returnValue = '';
     if (action !== 'save') return;
-    updateSettings(Object.fromEntries(new FormData($('#settingsForm'))));
-    toast('Settings saved');
+    const f = Object.fromEntries(new FormData($('#settingsForm')));
+    const patch = {
+      provider: f.serviceChoice, pollMinutes: f.pollMinutes, proxyUrl: f.proxyUrl, googleClientId: f.googleClientId, helperUrl: f.helperUrl,
+    };
+    if (KEY_FIELD[f.serviceChoice]) pendingKeys[f.serviceChoice] = f.serviceKey || '';
+    for (const [svc, field] of Object.entries(KEY_FIELD)) patch[field] = pendingKeys[svc] || '';
+    updateSettings(patch);
+    toast(KEY_FIELD[f.serviceChoice] && !f.serviceKey ? 'Saved. Paste a key to turn on live tracking.' : 'Settings saved', 4000);
     renderProvider();
     refreshAll({ onlyStale: true });
   });
   $('#notifyBtn').onclick = async () => { await Notification.requestPermission(); updateNotifyBtn(); };
+  const form = $('#settingsForm');
+  form.serviceChoice.onchange = () => {
+    const prev = form.serviceChoice.dataset.prev;
+    if (KEY_FIELD[prev]) pendingKeys[prev] = form.serviceKey.value;
+    form.serviceKey.value = pendingKeys[form.serviceChoice.value] || '';
+    form.serviceChoice.dataset.prev = form.serviceChoice.value;
+    updateServiceUi();
+  };
   $('#exportBtn').onclick = exportBackup;
   $('#importFile').onchange = async (e) => {
     const file = e.target.files[0];
@@ -670,6 +842,8 @@ function main() {
   initImport();
   initSettings();
   initStorePicker();
+  initQuickAdd();
+  initWizard();
   load();
   db.onChange(load);
 
@@ -692,6 +866,12 @@ function main() {
   $('#settingsBtn').onclick = openSettings;
   $('#providerChip').onclick = openSettings;
   document.addEventListener('click', (e) => {
+    const tab = e.target.closest('[data-open-tab]');
+    if (tab) {
+      showImportTab(tab.dataset.openTab);
+      $('#importDialog').showModal();
+      return;
+    }
     const t = e.target.closest('[data-open]');
     if (!t) return;
     e.preventDefault();

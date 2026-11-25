@@ -16,7 +16,7 @@ const ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.maxTouchPoint
 const open=()=>window.open(A+'#import='+encodeURIComponent(JSON.stringify({url:location.href,title:document.title,text:t+'\\n'+L.join('\\n')})),'_blank');
 if(!ios){open();return;}
 const s=${JSON.stringify(PAGE_MARKER)}+location.href+'\\n'+document.title+'\\n'+t+'\\n'+L.join('\\n');
-const msg='Order details copied. Open PackTrack and tap Take from email, then Paste from clipboard.';
+const msg='Order details copied. Open PackTrack and tap Paste.';
 const x=document.createElement('textarea');
 x.value=s;x.contentEditable='true';x.readOnly=false;x.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0';
 document.body.appendChild(x);

@@ -13,6 +13,12 @@ Track all your packages in one place, whichever carrier and store they come from
 - Orders without a tracking number yet are kept as **“awaiting tracking”**, and filled in when the tracking number arrives.
 - Search, store filter, archive, notifications while open, dark mode, backup export/restore.
 
+## Using it
+
+- **Add a package:** paste a tracking number, or a whole shipping email, into the box at the top and tap **Add** (or **📋 Paste**). PackTrack finds the tracking numbers, carrier, store and order number, and adds them right away. Tap **Undo** if it got something wrong. If it isn't sure, it shows what it found so you can pick.
+- **Live tracking:** **Settings**: pick a service (17TRACK is the default), paste its free key, and save. **Try demo** on the banner shows made-up progress to try things out.
+- **Gmail:** **Take from email → Gmail** has a 6-step checklist with a button that opens each Google page; the checklist ticks itself off as you go.
+
 ## Publish on GitHub Pages
 
 The workflow in `.github/workflows/pages.yml` runs the tests and publishes the `public/` folder whenever `main` changes.
@@ -32,7 +38,7 @@ The workflow in `.github/workflows/pages.yml` runs the tests and publishes the `
 Open the page in Safari (or Chrome) and choose **Share → Add to Home Screen**. It opens full-screen with its own icon.
 
 - On iPhone, the home-screen app keeps **its own storage, separate from Safari**. Add your packages from the home-screen app (or move them with Export/Restore).
-- The **Send to PackTrack** bookmark works on iPhone too. On a shop's order page it copies the order details, and you paste them in the app with **Take from email → Paste from clipboard**. Setup steps are in the app under **Take from email → Bookmark**.
+- The **Send to PackTrack** bookmark works on iPhone too. On a shop's order page it copies the order details, and you tap **📋 Paste** on the main screen. Setup steps are in the app under **Take from email → Bookmark**.
 - Status is checked while the app is open; it doesn't send push notifications when closed.
 
 ## Live tracking
