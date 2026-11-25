@@ -30,7 +30,7 @@ The workflow in `.github/workflows/pages.yml` runs the tests and publishes the `
 Open the page in Safari (or Chrome) and choose **Share → Add to Home Screen**. It opens full-screen with its own icon.
 
 - On iPhone, the home-screen app keeps **its own storage, separate from Safari**. Add your packages from the home-screen app (or move them with Export/Restore).
-- The bookmarklet opens results in Safari, not in the home-screen app. On the phone, use **Import → Paste** instead.
+- The bookmarklet opens results in Safari, not in the home-screen app. On the phone, use **Take from email → Paste email** instead.
 - Status is checked while the app is open; it doesn't send push notifications when closed.
 
 ## Live tracking
@@ -60,7 +60,7 @@ cp .env.example .env   # fill in IMAP_* and HELPER_ORIGINS=https://<your-usernam
 npm start              # http://localhost:3000 (also serves the app itself)
 ```
 
-Then put `http://localhost:3000` in **Settings → Helper address** and use **Import → Email sync**.
+Then put `http://localhost:3000` in **Settings → Helper address** and use **Take from email → Email sync**.
 
 - Gmail: turn on 2-step verification and create an *app password*. Host `imap.gmail.com`, port 993.
 - Outlook / Hotmail: host `outlook.office365.com`, port 993.

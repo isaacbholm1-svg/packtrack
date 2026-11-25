@@ -22,8 +22,8 @@
     </div>
     <div id="providerChip" class="chip" title="Tracking provider"></div>
     <div class="spacer"></div>
-    <button id="refreshAllBtn" class="btn ghost" title="Refresh all active shipments">↻ Refresh</button>
-    <button id="importBtn" class="btn ghost">Import</button>
+    <button id="refreshAllBtn" class="btn ghost" title="Refresh all active shipments" aria-label="Refresh">↻ <span class="lbl">Refresh</span></button>
+    <button id="importBtn" class="btn ghost">Take from email</button>
     <button id="settingsBtn" class="btn ghost" aria-label="Settings">⚙</button>
     <button id="addBtn" class="btn primary">+ Add</button>
   </header>
@@ -45,10 +45,10 @@
     <section id="list" class="list" aria-live="polite"></section>
     <section id="empty" class="empty" hidden>
       <h2>No packages here yet</h2>
-      <p>Add tracking numbers by hand, or paste a shipping email or order page from Amazon, Temu, Bambu Lab, Verkkokauppa.com and others, and PackTrack finds the packages in it.</p>
+      <p>Add tracking numbers by hand, or take them from a shipping email.</p>
       <div class="row center">
         <button class="btn primary" data-open="addDialog">+ Add tracking numbers</button>
-        <button class="btn" data-open="importDialog">Import from email or page</button>
+        <button class="btn" data-open="importDialog">Take from email</button>
       </div>
     </section>
   </main>
@@ -89,22 +89,22 @@
   <!-- Import dialog -->
   <dialog id="importDialog" class="wide">
     <div class="dialog-head">
-      <h2>Import from stores</h2>
+      <h2>Take from email</h2>
       <button class="btn ghost" data-close aria-label="Close">✕</button>
     </div>
     <div class="tabs small">
-      <button class="tab active" data-itab="paste">Paste email / page</button>
-      <button class="tab" data-itab="bookmarklet">Browser button</button>
+      <button class="tab active" data-itab="paste">Paste email</button>
+      <button class="tab" data-itab="bookmarklet">Bookmark</button>
       <button class="tab" data-itab="email">Email sync</button>
     </div>
 
     <div data-ipane="paste">
-      <p class="muted">Paste a shipping confirmation email or the text of an order page (Amazon, Temu, Bambu Lab, Verkkokauppa.com, AliExpress, eBay, SHEIN…). Nothing is saved until you confirm.</p>
+      <p class="muted">Paste a shipping email and PackTrack finds the tracking numbers in it. Nothing is saved until you confirm.</p>
       <div class="grid2">
-        <label>From <small>optional</small><input id="impFrom" placeholder="shipment-tracking@amazon.de"></label>
+        <label>From <small>optional</small><input id="impFrom" placeholder="shop@example.com"></label>
         <label>Subject <small>optional</small><input id="impSubject"></label>
       </div>
-      <label>Email or page text
+      <label>Email text
         <textarea id="impText" rows="8" placeholder="Paste here…"></textarea>
       </label>
       <div class="row end"><button id="impParse" class="btn primary">Find packages</button></div>
@@ -114,7 +114,7 @@
       <p>Store order pages need you to be logged in, so PackTrack can't fetch them itself. Instead, drag this button to your bookmarks bar:</p>
       <p class="center"><a id="bookmarklet" class="btn primary bookmarklet" href="#">📦 Send to PackTrack</a></p>
       <ol class="muted">
-        <li>Open an order or “track package” page on Amazon, Temu, Bambu Lab, Verkkokauppa.com or any other shop.</li>
+        <li>Open an order or “track package” page in any shop.</li>
         <li>Click <b>Send to PackTrack</b> in your bookmarks bar.</li>
         <li>PackTrack opens with the packages it found on that page for you to confirm.</li>
       </ol>
