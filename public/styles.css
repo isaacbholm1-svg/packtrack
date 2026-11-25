@@ -252,3 +252,60 @@ details.setup summary { cursor: pointer; font-weight: 600; }
 .store-tag .logo-letter { font-size: 9px; }
 .store-input .logo-letter { font-size: 15px; border: 0; padding: 0; }
 .tile-logo.logo-letter { font-size: 12px; }
+
+/* ---- Easier: banner, quick add, checklist ---- */
+.banner {
+  display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; justify-content: space-between;
+  background: var(--info-bg); color: var(--text); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 12px;
+}
+.banner-actions { display: flex; gap: 8px; }
+.quick {
+  display: flex; gap: 10px; align-items: stretch; margin-bottom: 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; box-shadow: var(--shadow);
+}
+.quick textarea { border: 0; resize: none; font-family: inherit; font-size: 1rem; padding: 8px; min-height: 44px; flex: 1; }
+.quick textarea:focus { outline: none; }
+.quick:focus-within { border-color: var(--accent); }
+.quick-actions { display: flex; gap: 8px; align-items: center; }
+.quick-actions .btn { padding: 10px 16px; font-size: 1rem; }
+
+details.more { margin-top: 10px; }
+details.more summary { cursor: pointer; color: var(--accent); font-size: .9rem; }
+
+.wizard { list-style: none; padding: 0; margin: 10px 0; counter-reset: step; }
+.wizard > li {
+  counter-increment: step; position: relative; padding: 12px 12px 12px 48px; margin: 8px 0;
+  border: 1px solid var(--border); border-radius: 12px;
+}
+.wizard > li::before {
+  content: counter(step); position: absolute; left: 12px; top: 12px; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; font-weight: 700; font-size: .85rem; background: var(--surface-2); color: var(--muted);
+}
+.wizard > li.next { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
+.wizard > li.next::before { background: var(--accent); color: #fff; }
+.wizard > li.done::before { content: "✓"; background: var(--ok-bg); color: var(--ok); }
+.wizard > li.done:not(.next) > :not(.check) { display: none; }
+.wizard > li.done .check b { color: var(--muted); text-decoration: line-through; }
+.wizard p { margin: 6px 0; font-size: .92rem; }
+.wizard .check { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 1rem; }
+.wizard .check input { width: auto; margin: 0; }
+.wizard.simple > li { padding-top: 14px; padding-bottom: 14px; }
+.copy-big {
+  display: grid; gap: 2px; width: 100%; text-align: left; margin: 6px 0; padding: 10px 12px; cursor: pointer;
+  font: inherit; color: var(--text); background: var(--surface-2); border: 1px dashed var(--accent); border-radius: 10px;
+}
+.copy-big span:first-child { font-size: .8rem; color: var(--muted); }
+.copy-big code { background: none; padding: 0; font-size: .95rem; overflow-wrap: anywhere; }
+.copy-big .copy-hint { font-size: .8rem; color: var(--accent); font-weight: 600; }
+.paste-row { display: flex; gap: 8px; margin: 6px 0; }
+.paste-row input { flex: 1; min-width: 0; }
+
+.toast { display: flex; align-items: center; gap: 14px; }
+.toast-action { font: inherit; font-weight: 700; color: var(--bg); background: none; border: 0; text-decoration: underline; cursor: pointer; padding: 0; }
+
+@media (max-width: 640px) {
+  .quick { flex-direction: column; }
+  .quick-actions .btn { flex: 1; justify-content: center; }
+  .banner-actions { width: 100%; }
+  .banner-actions .btn { flex: 1; justify-content: center; }
+}

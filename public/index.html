@@ -20,15 +20,33 @@
       <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--accent)"/><path d="M8 11l8-4 8 4v10l-8 4-8-4z M8 11l8 4 8-4 M16 15v10" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
       <span>PackTrack</span>
     </div>
-    <div id="providerChip" class="chip" title="Tracking provider"></div>
+    <div id="providerChip" class="chip" title="Live tracking"></div>
     <div class="spacer"></div>
-    <button id="refreshAllBtn" class="btn ghost" title="Refresh all active shipments" aria-label="Refresh">↻ <span class="lbl">Refresh</span></button>
+    <button id="refreshAllBtn" class="btn ghost" title="Refresh all active packages" aria-label="Refresh">↻ <span class="lbl">Refresh</span></button>
     <button id="importBtn" class="btn ghost">Take from email</button>
     <button id="settingsBtn" class="btn ghost" aria-label="Settings">⚙</button>
     <button id="addBtn" class="btn primary">+ Add</button>
   </header>
 
   <main>
+    <!-- Shown until live tracking is turned on -->
+    <section id="setupBanner" class="banner" hidden>
+      <div class="banner-text"><b>Turn on live tracking</b> to see where your packages are right now.</div>
+      <div class="banner-actions">
+        <button class="btn ghost" id="demoBtn">Try demo</button>
+        <button class="btn primary" data-open="settingsDialog">Set up</button>
+      </div>
+    </section>
+
+    <!-- Quick add: one box for tracking numbers or whole emails -->
+    <section class="quick">
+      <textarea id="quickText" rows="2" placeholder="Paste a tracking number or a whole shipping email…" aria-label="Tracking number or shipping email"></textarea>
+      <div class="quick-actions">
+        <button id="quickPaste" class="btn">📋 Paste</button>
+        <button id="quickAdd" class="btn primary">Add</button>
+      </div>
+    </section>
+
     <section class="toolbar">
       <div class="tabs" role="tablist">
         <button data-filter="active" class="tab active">Active <span class="count" data-count="active"></span></button>
@@ -38,23 +56,22 @@
       </div>
       <div class="filters">
         <select id="storeFilter" aria-label="Filter by store"><option value="">All stores</option></select>
-        <input id="search" type="search" placeholder="Search name, number, order…" aria-label="Search">
+        <input id="search" type="search" placeholder="Search…" aria-label="Search">
       </div>
     </section>
 
     <section id="list" class="list" aria-live="polite"></section>
     <section id="empty" class="empty" hidden>
-      <h2>No packages here yet</h2>
-      <p>Add tracking numbers by hand, or take them from a shipping email.</p>
+      <h2>No packages yet</h2>
+      <p>Paste a tracking number or a shipping email in the box above, or let PackTrack read your Gmail.</p>
       <div class="row center">
-        <button class="btn primary" data-open="addDialog">+ Add tracking numbers</button>
-        <button class="btn" data-open="importDialog">Take from email</button>
+        <button class="btn" data-open-tab="email">✉ Connect Gmail</button>
       </div>
     </section>
   </main>
 
   <!-- Detail drawer -->
-  <aside id="drawer" class="drawer" hidden aria-label="Shipment details">
+  <aside id="drawer" class="drawer" hidden aria-label="Package details">
     <div class="drawer-head">
       <button class="btn ghost" id="drawerClose" aria-label="Close">✕</button>
       <div class="spacer"></div>
@@ -67,24 +84,27 @@
   <dialog id="addDialog">
     <form method="dialog" id="addForm">
       <h2>Add packages</h2>
-      <label>Tracking numbers <small>one per line — carrier is detected automatically</small>
-        <textarea name="numbers" rows="5" placeholder="1Z999AA10123456784&#10;JJFI64412100012345678&#10;LP00512345678901" required></textarea>
+      <label>Tracking numbers <small>one per line</small>
+        <textarea name="numbers" rows="4" placeholder="1Z999AA10123456784&#10;JJFI64412100012345678" required></textarea>
       </label>
       <div id="detectPreview" class="detect"></div>
-      <div class="grid2">
-        <label>Name <input name="label" placeholder="e.g. AMS filament"></label>
-        <label>Carrier
-          <select name="carrier"><option value="">Detect automatically</option></select>
-        </label>
-        <label>Store
-          <span class="store-input">
-            <span class="logo-slot"></span>
-            <input name="store" list="storeList" placeholder="Type a store…" autocomplete="off" autocapitalize="words">
-            <button type="button" class="btn ghost browse-stores" title="Browse stores" aria-label="Browse stores">☰ Stores</button>
-          </span>
-        </label>
-        <label>Order number <input name="orderNumber"></label>
-      </div>
+      <label>Name <small>optional</small><input name="label" placeholder="e.g. AMS filament"></label>
+      <label>Store <small>optional</small>
+        <span class="store-input">
+          <span class="logo-slot"></span>
+          <input name="store" list="storeList" placeholder="Type a store…" autocomplete="off" autocapitalize="words">
+          <button type="button" class="btn ghost browse-stores" title="Browse stores" aria-label="Browse stores">☰ Stores</button>
+        </span>
+      </label>
+      <details class="more">
+        <summary>More options</summary>
+        <div class="grid2">
+          <label>Carrier
+            <select name="carrier"><option value="">Detect automatically</option></select>
+          </label>
+          <label>Order number <input name="orderNumber"></label>
+        </div>
+      </details>
       <div class="row end">
         <button value="cancel" class="btn ghost" formnovalidate>Cancel</button>
         <button value="add" class="btn primary">Add</button>
@@ -92,7 +112,7 @@
     </form>
   </dialog>
 
-  <!-- Import dialog -->
+  <!-- Take from email dialog -->
   <dialog id="importDialog" class="wide">
     <div class="dialog-head">
       <h2>Take from email</h2>
@@ -100,77 +120,104 @@
     </div>
     <div class="tabs small">
       <button class="tab active" data-itab="paste">Paste email</button>
+      <button class="tab" data-itab="email">Gmail</button>
       <button class="tab" data-itab="bookmarklet">Bookmark</button>
-      <button class="tab" data-itab="email">Email sync</button>
     </div>
 
     <div data-ipane="paste">
-      <p class="muted">Paste a shipping email and PackTrack finds the tracking numbers in it. Nothing is saved until you confirm.</p>
-      <div class="grid2">
-        <label>From <small>optional</small><input id="impFrom" placeholder="shop@example.com"></label>
-        <label>Subject <small>optional</small><input id="impSubject"></label>
-      </div>
       <label>Email text
-        <textarea id="impText" rows="8" placeholder="Paste here…"></textarea>
+        <textarea id="impText" rows="8" placeholder="Paste a shipping email here…"></textarea>
       </label>
-      <div class="row end"><button id="impPasteClip" class="btn">Paste from clipboard</button><button id="impParse" class="btn primary">Find packages</button></div>
-    </div>
-
-    <div data-ipane="bookmarklet" hidden>
-      <p>Store order pages need you to be logged in, so PackTrack can't open them itself. A bookmark can send the order page you're looking at to PackTrack instead.</p>
-
-      <h3>On iPhone or iPad</h3>
-      <ol class="steps">
-        <li><button type="button" id="copyBookmarklet" class="btn primary">Copy bookmark code</button></li>
-        <li>In Safari, open any page and tap <b>Share → Add Bookmark</b>, name it <b>Send to PackTrack</b>, tap <b>Save</b>.</li>
-        <li>Tap the <b>Bookmarks</b> button (📖) → <b>Edit</b> → tap <b>Send to PackTrack</b>. Clear the address and paste the code. Tap <b>Done</b>.</li>
-        <li>On a shop's order page in Safari, open <b>Bookmarks</b> and tap <b>Send to PackTrack</b>. It copies the order details.</li>
-        <li>Open PackTrack → <b>Take from email</b> → <b>Paste from clipboard</b>.</li>
-      </ol>
-
-      <h3>On a computer</h3>
-      <p>Drag this button to your bookmarks bar, then click it on a shop's order page:</p>
-      <p class="center"><a id="bookmarklet" class="btn primary bookmarklet" href="#">📦 Send to PackTrack</a></p>
-      <p class="muted small">The page is passed only to PackTrack on your own device. Nothing is saved until you confirm.</p>
+      <details class="more">
+        <summary>More options</summary>
+        <div class="grid2">
+          <label>From <input id="impFrom" placeholder="shop@example.com"></label>
+          <label>Subject <input id="impSubject"></label>
+        </div>
+      </details>
+      <div class="row end"><button id="impPasteClip" class="btn">📋 Paste</button><button id="impParse" class="btn primary">Find packages</button></div>
     </div>
 
     <div data-ipane="email" hidden>
-      <h3 class="first">Gmail</h3>
-      <p class="muted">Works on your phone. PackTrack reads your shipping emails straight from Gmail (read-only) and adds the packages it finds. Your mail never goes anywhere else.</p>
       <div id="gmailStatus" class="card-lite"></div>
       <div class="row end">
         <button id="gmailDisconnect" class="btn ghost" hidden>Disconnect</button>
         <button id="gmailSyncBtn" class="btn primary">Connect Gmail</button>
       </div>
 
-      <details id="gmailSetup" class="setup">
-        <summary>One-time setup (about 10 minutes, easiest on a computer)</summary>
-        <p class="muted small">Google only lets apps read Gmail with a sign-in key (“client ID”) that you create for yourself. It's free.</p>
-        <ol class="steps">
-          <li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a>, sign in with your Gmail account and create a new project (call it <b>PackTrack</b>).</li>
-          <li>Search for <b>Gmail API</b> in the top bar, open it and tap <b>Enable</b>.</li>
-          <li>Open <b>Google Auth Platform</b> (or <b>APIs &amp; Services → OAuth consent screen</b>) → <b>Get started</b>. App name <b>PackTrack</b>, your email as support email, audience <b>External</b>, then finish.</li>
-          <li>Under <b>Audience → Test users</b>, add your own Gmail address.</li>
-          <li>Under <b>Clients</b> (or <b>Credentials</b>) → <b>Create client</b> → type <b>Web application</b>. Add:
-            <div class="copy-row">Authorized JavaScript origin: <code id="gmailOrigin"></code> <button type="button" class="btn ghost small-btn" data-copy="#gmailOrigin">Copy</button></div>
-            <div class="copy-row">Authorized redirect URI: <code id="gmailRedirect"></code> <button type="button" class="btn ghost small-btn" data-copy="#gmailRedirect">Copy</button></div>
-            Then <b>Create</b>.</li>
-          <li>Copy the <b>Client ID</b> (ends in <code>.apps.googleusercontent.com</code>) and paste it in PackTrack <a href="#" data-open="settingsDialog">Settings</a> → <b>Google client ID</b>.</li>
-          <li>Tap <b>Connect Gmail</b>. Google will say <i>“Google hasn't verified this app”</i>. That's expected for your own app, so tap <b>Continue</b>.</li>
+      <div id="gmailWizard">
+        <h3>Set up Gmail once <span class="count" id="wizardProgress"></span></h3>
+        <p class="muted small">Google needs you to make a free sign-in key for PackTrack. Do each step, tap <b>Open</b>, then come back. It's easiest on a computer.</p>
+        <ol class="wizard">
+          <li data-step="1">
+            <label class="check"><input type="checkbox"><b>Make a project</b></label>
+            <p>Sign in with your Gmail, name it <b>PackTrack</b>, tap <b>Create</b>.</p>
+            <a class="btn" target="_blank" rel="noopener" href="https://console.cloud.google.com/projectcreate">Open ↗</a>
+          </li>
+          <li data-step="2">
+            <label class="check"><input type="checkbox"><b>Turn on Gmail access</b></label>
+            <p>Check PackTrack is the selected project at the top, then tap <b>Enable</b>.</p>
+            <a class="btn" target="_blank" rel="noopener" href="https://console.cloud.google.com/apis/library/gmail.googleapis.com">Open ↗</a>
+          </li>
+          <li data-step="3">
+            <label class="check"><input type="checkbox"><b>Set up the sign-in screen</b></label>
+            <p>Tap <b>Get started</b>. App name <b>PackTrack</b>, pick your email, Audience <b>External</b>, your email again, agree, <b>Create</b>.</p>
+            <a class="btn" target="_blank" rel="noopener" href="https://console.cloud.google.com/auth/overview">Open ↗</a>
+          </li>
+          <li data-step="4">
+            <label class="check"><input type="checkbox"><b>Add yourself as a tester</b></label>
+            <p>Under <b>Test users</b> tap <b>Add users</b>, type your Gmail address, <b>Save</b>.</p>
+            <a class="btn" target="_blank" rel="noopener" href="https://console.cloud.google.com/auth/audience">Open ↗</a>
+          </li>
+          <li data-step="5">
+            <label class="check"><input type="checkbox"><b>Make the key</b></label>
+            <p>Type <b>Web application</b>. Then add these two. Tap to copy, then paste each:</p>
+            <button type="button" class="copy-big" data-copy="#gmailOrigin"><span>Authorized JavaScript origins → Add URI</span><code id="gmailOrigin"></code><span class="copy-hint">Copy</span></button>
+            <button type="button" class="copy-big" data-copy="#gmailRedirect"><span>Authorized redirect URIs → Add URI</span><code id="gmailRedirect"></code><span class="copy-hint">Copy</span></button>
+            <p>Tap <b>Create</b> and copy the <b>Client ID</b> it shows.</p>
+            <a class="btn" target="_blank" rel="noopener" href="https://console.cloud.google.com/auth/clients/create">Open ↗</a>
+          </li>
+          <li data-step="6">
+            <label class="check"><input type="checkbox" disabled><b>Paste the Client ID here</b></label>
+            <div class="paste-row">
+              <input id="wizardClientId" placeholder="….apps.googleusercontent.com" autocomplete="off" autocapitalize="off" spellcheck="false">
+              <button type="button" id="wizardConnect" class="btn primary">Connect</button>
+            </div>
+            <p class="muted small">Google then says <i>“Google hasn't verified this app”</i>. That's normal for your own app: tap <b>Continue</b>.</p>
+          </li>
         </ol>
-        <p class="muted small">Google signs you out of the app after an hour. PackTrack checks Gmail automatically while you're signed in; after that, tap <b>Check Gmail now</b> to sign in again with one tap.</p>
-      </details>
+      </div>
+      <p class="muted small">Gmail is read-only and your mail never leaves your phone. Google signs PackTrack out after an hour; tap <b>Check Gmail now</b> to sign back in.</p>
 
       <details class="setup">
-        <summary>Other email providers (needs a computer)</summary>
-        <p class="muted">For Outlook and other mailboxes, run the small <b>PackTrack helper</b> on your computer. It reads the mailbox (read-only) and hands the packages it finds to PackTrack.</p>
-        <ol class="muted">
-          <li>Download the project, then put your mail settings in <code>.env</code> (see <code>.env.example</code>).</li>
-          <li>Run <code>npm install</code> and <code>npm start</code>.</li>
-          <li>Enter the helper address (usually <code>http://localhost:3000</code>) in <a href="#" data-open="settingsDialog">Settings</a>.</li>
-        </ol>
+        <summary>Not using Gmail?</summary>
+        <p class="muted">For Outlook and other mailboxes, run the small PackTrack helper on a computer (see the project's README), then add its address in Settings → Advanced.</p>
         <div id="emailStatus" class="card-lite"></div>
         <div class="row end"><button id="emailSyncBtn" class="btn">Check mailbox now</button></div>
+      </details>
+    </div>
+
+    <div data-ipane="bookmarklet" hidden>
+      <p>A bookmark that sends a shop's order page (where you're logged in) to PackTrack.</p>
+
+      <div data-device="ios">
+        <ol class="wizard simple">
+          <li><button type="button" id="copyBookmarklet" class="btn primary">Copy bookmark code</button></li>
+          <li>In Safari, bookmark any page (<b>Share → Add Bookmark</b>). Then open <b>Bookmarks → Edit</b>, tap the new bookmark and replace its address with the code. Name it <b>PackTrack</b>.</li>
+          <li>On a shop's order page, open <b>Bookmarks</b> and tap <b>PackTrack</b>. Then open PackTrack and tap <b>📋 Paste</b>.</li>
+        </ol>
+      </div>
+
+      <div data-device="desktop">
+        <ol class="wizard simple">
+          <li>Drag this button to your bookmarks bar: <a id="bookmarklet" class="btn primary bookmarklet" href="#">📦 PackTrack</a></li>
+          <li>On a shop's order page, click <b>PackTrack</b> in the bookmarks bar.</li>
+        </ol>
+      </div>
+
+      <details class="setup">
+        <summary id="otherDeviceLabel">On another device?</summary>
+        <div id="otherDevice"></div>
       </details>
     </div>
 
@@ -185,47 +232,42 @@
         <button value="cancel" class="btn ghost" formnovalidate aria-label="Close">✕</button>
       </div>
 
-      <h3>Live tracking</h3>
-      <p class="muted">PackTrack gets live status from a tracking aggregator that covers 1,000+ carriers (Posti, Matkahuolto, PostNord, DHL, UPS, FedEx, USPS, Cainiao, YunExpress…). All three have free tiers — add a key for at least one. Without a key you can still store packages and open the carrier's tracking page.</p>
-      <label>Provider
-        <select name="provider">
-          <option value="auto">Automatic (first one with a key)</option>
-          <option value="17track">17TRACK</option>
-          <option value="ship24">Ship24</option>
-          <option value="aftership">AfterShip</option>
-          <option value="mock">Demo data (fake progress, for trying the app)</option>
-          <option value="none">None</option>
-        </select>
-      </label>
+      <h3 class="first">Live tracking</h3>
+      <p class="muted">Pick a free tracking service and paste its key. One key covers Posti, Matkahuolto, DHL, UPS, Cainiao and 1,000+ other carriers.</p>
       <div class="grid2">
-        <label>17TRACK API key <small><a href="https://api.17track.net" target="_blank" rel="noopener">get one</a></small><input name="seventeenTrackKey" type="password" autocomplete="off"></label>
-        <label>Ship24 API key <small><a href="https://www.ship24.com/tracking-api" target="_blank" rel="noopener">get one</a></small><input name="ship24Key" type="password" autocomplete="off"></label>
-        <label>AfterShip API key <small><a href="https://www.aftership.com/tracking-api" target="_blank" rel="noopener">get one</a></small><input name="aftershipKey" type="password" autocomplete="off"></label>
-        <label>Check every (minutes) <small>while the page is open</small><input name="pollMinutes" type="number" min="0" step="5"></label>
+        <label>Service
+          <select name="serviceChoice">
+            <option value="17track">17TRACK (recommended)</option>
+            <option value="ship24">Ship24</option>
+            <option value="aftership">AfterShip</option>
+            <option value="mock">Demo (fake progress)</option>
+            <option value="none">Off</option>
+          </select>
+        </label>
+        <label>Key <input name="serviceKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste your key"></label>
       </div>
-
-      <label>Proxy URL <small>optional, only needed if the browser blocks the tracking API (see README)</small>
-        <input name="proxyUrl" placeholder="https://packtrack-proxy.you.workers.dev" autocomplete="off">
-      </label>
-
-      <h3>Email sync</h3>
-      <label>Google client ID <small>for Gmail sync, see Take from email → Email sync</small>
-        <input name="googleClientId" placeholder="1234-abc.apps.googleusercontent.com" autocomplete="off" autocapitalize="off" spellcheck="false">
-      </label>
-      <label>Helper address <small>optional, the PackTrack helper running on your computer</small>
-        <input name="helperUrl" placeholder="http://localhost:3000" autocomplete="off">
-      </label>
+      <p class="muted small" id="serviceHelp"></p>
 
       <h3>Your data</h3>
       <p class="muted small" id="storageNote"></p>
-      <p class="muted small">API keys are kept in this browser only. They're sent only to the tracking service (through your proxy if you set one).</p>
       <div class="row">
         <button type="button" id="exportBtn" class="btn">Export backup</button>
         <label class="btn file-btn">Restore backup… <input type="file" id="importFile" accept="application/json,.json" hidden></label>
+        <button type="button" id="notifyBtn" class="btn">Enable notifications</button>
       </div>
 
-      <h3>Notifications</h3>
-      <button type="button" id="notifyBtn" class="btn">Enable browser notifications</button>
+      <details class="setup">
+        <summary>Advanced</summary>
+        <div class="grid2">
+          <label>Check every (minutes) <input name="pollMinutes" type="number" min="0" step="5"></label>
+          <label>Proxy URL <small>if the browser blocks the service</small>
+            <input name="proxyUrl" placeholder="https://….workers.dev" autocomplete="off">
+          </label>
+          <label>Google client ID <input name="googleClientId" placeholder="….apps.googleusercontent.com" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+          <label>Helper address <small>computer helper</small><input name="helperUrl" placeholder="http://localhost:3000" autocomplete="off"></label>
+        </div>
+        <p class="muted small">Keys stay in this browser and are only sent to the service you pick.</p>
+      </details>
 
       <div class="row end">
         <button value="cancel" class="btn ghost" formnovalidate>Cancel</button>
@@ -245,7 +287,7 @@
   </dialog>
 
   <datalist id="storeList"></datalist>
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" hidden><span id="toastText"></span><button id="toastAction" class="toast-action" hidden></button></div>
   <script src="app.js" type="module"></script>
 </body>
 </html>
