@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="PackTrack">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <title>PackTrack</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232563eb'/><path d='M8 11l8-4 8 4v10l-8 4-8-4z' fill='none' stroke='white' stroke-width='2' stroke-linejoin='round'/><path d='M8 11l8 4 8-4M16 15v10' fill='none' stroke='white' stroke-width='2' stroke-linejoin='round'/></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--accent)"/><path d="M8 11l8-4 8 4v10l-8 4-8-4z M8 11l8 4 8-4 M16 15v10" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
+      <span>PackTrack</span>
+    </div>
+    <div id="providerChip" class="chip" title="Tracking provider"></div>
+    <div class="spacer"></div>
+    <button id="refreshAllBtn" class="btn ghost" title="Refresh all active shipments">↻ Refresh</button>
+    <button id="importBtn" class="btn ghost">Import</button>
+    <button id="settingsBtn" class="btn ghost" aria-label="Settings">⚙</button>
+    <button id="addBtn" class="btn primary">+ Add</button>
+  </header>
+
+  <main>
+    <section class="toolbar">
+      <div class="tabs" role="tablist">
+        <button data-filter="active" class="tab active">Active <span class="count" data-count="active"></span></button>
+        <button data-filter="delivered" class="tab">Delivered <span class="count" data-count="delivered"></span></button>
+        <button data-filter="archived" class="tab">Archived <span class="count" data-count="archived"></span></button>
+        <button data-filter="all" class="tab">All <span class="count" data-count="all"></span></button>
+      </div>
+      <div class="filters">
+        <select id="storeFilter" aria-label="Filter by store"><option value="">All stores</option></select>
+        <input id="search" type="search" placeholder="Search name, number, order…" aria-label="Search">
+      </div>
+    </section>
+
+    <section id="list" class="list" aria-live="polite"></section>
+    <section id="empty" class="empty" hidden>
+      <h2>No packages here yet</h2>
+      <p>Add tracking numbers by hand, or paste a shipping email or order page from Amazon, Temu, Bambu Lab, Verkkokauppa.com and others, and PackTrack finds the packages in it.</p>
+      <div class="row center">
+        <button class="btn primary" data-open="addDialog">+ Add tracking numbers</button>
+        <button class="btn" data-open="importDialog">Import from email or page</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Detail drawer -->
+  <aside id="drawer" class="drawer" hidden aria-label="Shipment details">
+    <div class="drawer-head">
+      <button class="btn ghost" id="drawerClose" aria-label="Close">✕</button>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="drawerRefresh">↻ Refresh</button>
+    </div>
+    <div id="drawerBody" class="drawer-body"></div>
+  </aside>
+
+  <!-- Add dialog -->
+  <dialog id="addDialog">
+    <form method="dialog" id="addForm">
+      <h2>Add packages</h2>
+      <label>Tracking numbers <small>one per line — carrier is detected automatically</small>
+        <textarea name="numbers" rows="5" placeholder="1Z999AA10123456784&#10;JJFI64412100012345678&#10;LP00512345678901" required></textarea>
+      </label>
+      <div id="detectPreview" class="detect"></div>
+      <div class="grid2">
+        <label>Name <input name="label" placeholder="e.g. AMS filament"></label>
+        <label>Carrier
+          <select name="carrier"><option value="">Detect automatically</option></select>
+        </label>
+        <label>Store <select name="store"><option value="">—</option></select></label>
+        <label>Order number <input name="orderNumber"></label>
+      </div>
+      <div class="row end">
+        <button value="cancel" class="btn ghost" formnovalidate>Cancel</button>
+        <button value="add" class="btn primary">Add</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Import dialog -->
+  <dialog id="importDialog" class="wide">
+    <div class="dialog-head">
+      <h2>Import from stores</h2>
+      <button class="btn ghost" data-close aria-label="Close">✕</button>
+    </div>
+    <div class="tabs small">
+      <button class="tab active" data-itab="paste">Paste email / page</button>
+      <button class="tab" data-itab="bookmarklet">Browser button</button>
+      <button class="tab" data-itab="email">Email sync</button>
+    </div>
+
+    <div data-ipane="paste">
+      <p class="muted">Paste a shipping confirmation email or the text of an order page (Amazon, Temu, Bambu Lab, Verkkokauppa.com, AliExpress, eBay, SHEIN…). Nothing is saved until you confirm.</p>
+      <div class="grid2">
+        <label>From <small>optional</small><input id="impFrom" placeholder="shipment-tracking@amazon.de"></label>
+        <label>Subject <small>optional</small><input id="impSubject"></label>
+      </div>
+      <label>Email or page text
+        <textarea id="impText" rows="8" placeholder="Paste here…"></textarea>
+      </label>
+      <div class="row end"><button id="impParse" class="btn primary">Find packages</button></div>
+    </div>
+
+    <div data-ipane="bookmarklet" hidden>
+      <p>Store order pages need you to be logged in, so PackTrack can't fetch them itself. Instead, drag this button to your bookmarks bar:</p>
+      <p class="center"><a id="bookmarklet" class="btn primary bookmarklet" href="#">📦 Send to PackTrack</a></p>
+      <ol class="muted">
+        <li>Open an order or “track package” page on Amazon, Temu, Bambu Lab, Verkkokauppa.com or any other shop.</li>
+        <li>Click <b>Send to PackTrack</b> in your bookmarks bar.</li>
+        <li>PackTrack opens with the packages it found on that page for you to confirm.</li>
+      </ol>
+      <p class="muted">The page text is passed only to this PackTrack window on your computer.</p>
+    </div>
+
+    <div data-ipane="email" hidden>
+      <p>A web page can't read your mailbox by itself. To pick up shipping emails automatically, run the small <b>PackTrack helper</b> on your computer. It reads the mailbox (read-only) and hands the packages it finds to this page.</p>
+      <ol class="muted">
+        <li>Download the project, then put your mail settings in <code>.env</code> (see <code>.env.example</code>; Gmail needs an <b>app password</b>).</li>
+        <li>Run <code>npm install</code> and <code>npm start</code>.</li>
+        <li>Enter the helper address (usually <code>http://localhost:3000</code>) in <a href="#" data-open="settingsDialog">Settings</a>.</li>
+      </ol>
+      <div id="emailStatus" class="card-lite"></div>
+      <div class="row end"><button id="emailSyncBtn" class="btn primary">Check mailbox now</button></div>
+    </div>
+
+    <div id="impResult" class="imp-result"></div>
+  </dialog>
+
+  <!-- Settings dialog -->
+  <dialog id="settingsDialog" class="wide">
+    <form method="dialog" id="settingsForm">
+      <div class="dialog-head">
+        <h2>Settings</h2>
+        <button value="cancel" class="btn ghost" formnovalidate aria-label="Close">✕</button>
+      </div>
+
+      <h3>Live tracking</h3>
+      <p class="muted">PackTrack gets live status from a tracking aggregator that covers 1,000+ carriers (Posti, Matkahuolto, PostNord, DHL, UPS, FedEx, USPS, Cainiao, YunExpress…). All three have free tiers — add a key for at least one. Without a key you can still store packages and open the carrier's tracking page.</p>
+      <label>Provider
+        <select name="provider">
+          <option value="auto">Automatic (first one with a key)</option>
+          <option value="17track">17TRACK</option>
+          <option value="ship24">Ship24</option>
+          <option value="aftership">AfterShip</option>
+          <option value="mock">Demo data (fake progress, for trying the app)</option>
+          <option value="none">None</option>
+        </select>
+      </label>
+      <div class="grid2">
+        <label>17TRACK API key <small><a href="https://api.17track.net" target="_blank" rel="noopener">get one</a></small><input name="seventeenTrackKey" type="password" autocomplete="off"></label>
+        <label>Ship24 API key <small><a href="https://www.ship24.com/tracking-api" target="_blank" rel="noopener">get one</a></small><input name="ship24Key" type="password" autocomplete="off"></label>
+        <label>AfterShip API key <small><a href="https://www.aftership.com/tracking-api" target="_blank" rel="noopener">get one</a></small><input name="aftershipKey" type="password" autocomplete="off"></label>
+        <label>Check every (minutes) <small>while the page is open</small><input name="pollMinutes" type="number" min="0" step="5"></label>
+      </div>
+
+      <label>Proxy URL <small>optional, only needed if the browser blocks the tracking API (see README)</small>
+        <input name="proxyUrl" placeholder="https://packtrack-proxy.you.workers.dev" autocomplete="off">
+      </label>
+
+      <h3>Email sync helper</h3>
+      <label>Helper address <small>optional, the PackTrack helper running on your computer</small>
+        <input name="helperUrl" placeholder="http://localhost:3000" autocomplete="off">
+      </label>
+
+      <h3>Your data</h3>
+      <p class="muted small" id="storageNote"></p>
+      <p class="muted small">API keys are kept in this browser only. They're sent only to the tracking service (through your proxy if you set one).</p>
+      <div class="row">
+        <button type="button" id="exportBtn" class="btn">Export backup</button>
+        <label class="btn file-btn">Restore backup… <input type="file" id="importFile" accept="application/json,.json" hidden></label>
+      </div>
+
+      <h3>Notifications</h3>
+      <button type="button" id="notifyBtn" class="btn">Enable browser notifications</button>
+
+      <div class="row end">
+        <button value="cancel" class="btn ghost" formnovalidate>Cancel</button>
+        <button value="save" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js" type="module"></script>
+</body>
+</html>
