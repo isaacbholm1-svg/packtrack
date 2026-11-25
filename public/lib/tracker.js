@@ -2,7 +2,7 @@
 
 import { db } from './db.js';
 import { detectCarrier, normalizeNumber, carrierName, trackingUrl, universalTrackingUrl } from './carriers.js';
-import { STORE_BY_ID } from './stores.js';
+import { storeName, storeLogoUrl } from './stores.js';
 import { STATUSES, isActive } from './status.js';
 import { getProvider } from './providers/index.js';
 import { getSettings } from './settings.js';
@@ -12,7 +12,8 @@ export function view(s) {
   return {
     ...s,
     carrierName: s.carrier ? carrierName(s.carrier) : null,
-    storeName: s.store ? STORE_BY_ID[s.store]?.name || s.store : null,
+    storeName: storeName(s.store),
+    storeLogo: storeLogoUrl(s.store),
     statusLabel: STATUSES[s.status]?.label || s.status,
     trackingUrl: s.trackingNumber ? trackingUrl(s.carrier, s.trackingNumber) : null,
     universalUrl: s.trackingNumber ? universalTrackingUrl(s.trackingNumber) : null,

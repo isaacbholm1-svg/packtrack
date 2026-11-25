@@ -56,3 +56,25 @@ test('tracking URLs', () => {
   assert.equal(trackingUrl('ups', '1Z999AA10123456784'), 'https://www.ups.com/track?tracknum=1Z999AA10123456784');
   assert.match(trackingUrl('nope', 'X1'), /17track/);
 });
+
+import { matchStore, storeValue, storeLogoUrl, storeName } from '../public/lib/stores.js';
+
+test('typed store names are recognised', () => {
+  for (const [typed, id] of [['amazon', 'amazon'], ['Amazon.de', 'amazon'], ['bambu lab', 'bambulab'], ['BambuLab', 'bambulab'],
+    ['verkkokauppa', 'verkkokauppa'], ['Verkkokauppa.com', 'verkkokauppa'], ['TEMU', 'temu'], ['jimms.fi', 'jimms'], ['Elgiganten', 'gigantti']]) {
+    assert.equal(matchStore(typed)?.id, id, typed);
+  }
+  assert.equal(matchStore('My local shop'), null);
+  assert.equal(matchStore('a'), null);
+});
+
+test('custom stores are kept as typed; logos for known stores and web addresses', () => {
+  assert.equal(storeValue('  Amazon  '), 'amazon');
+  assert.equal(storeValue('My local shop'), 'My local shop');
+  assert.equal(storeValue(''), null);
+  assert.equal(storeName('amazon'), 'Amazon');
+  assert.equal(storeName('My local shop'), 'My local shop');
+  assert.match(storeLogoUrl('bambulab'), /domain=bambulab\.com/);
+  assert.match(storeLogoUrl('shop.example.fi'), /domain=shop\.example\.fi/);
+  assert.equal(storeLogoUrl('My local shop'), null);
+});

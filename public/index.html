@@ -76,7 +76,12 @@
         <label>Carrier
           <select name="carrier"><option value="">Detect automatically</option></select>
         </label>
-        <label>Store <select name="store"><option value="">—</option></select></label>
+        <label>Store
+          <span class="store-input">
+            <img class="store-logo" alt="" referrerpolicy="no-referrer" hidden onerror="this.hidden=true">
+            <input name="store" list="storeList" placeholder="Type a store…" autocomplete="off" autocapitalize="words">
+          </span>
+        </label>
         <label>Order number <input name="orderNumber"></label>
       </div>
       <div class="row end">
@@ -129,14 +134,43 @@
     </div>
 
     <div data-ipane="email" hidden>
-      <p>A web page can't read your mailbox by itself. To pick up shipping emails automatically, run the small <b>PackTrack helper</b> on your computer. It reads the mailbox (read-only) and hands the packages it finds to this page.</p>
-      <ol class="muted">
-        <li>Download the project, then put your mail settings in <code>.env</code> (see <code>.env.example</code>; Gmail needs an <b>app password</b>).</li>
-        <li>Run <code>npm install</code> and <code>npm start</code>.</li>
-        <li>Enter the helper address (usually <code>http://localhost:3000</code>) in <a href="#" data-open="settingsDialog">Settings</a>.</li>
-      </ol>
-      <div id="emailStatus" class="card-lite"></div>
-      <div class="row end"><button id="emailSyncBtn" class="btn primary">Check mailbox now</button></div>
+      <h3 class="first">Gmail</h3>
+      <p class="muted">Works on your phone. PackTrack reads your shipping emails straight from Gmail (read-only) and adds the packages it finds. Your mail never goes anywhere else.</p>
+      <div id="gmailStatus" class="card-lite"></div>
+      <div class="row end">
+        <button id="gmailDisconnect" class="btn ghost" hidden>Disconnect</button>
+        <button id="gmailSyncBtn" class="btn primary">Connect Gmail</button>
+      </div>
+
+      <details id="gmailSetup" class="setup">
+        <summary>One-time setup (about 10 minutes, easiest on a computer)</summary>
+        <p class="muted small">Google only lets apps read Gmail with a sign-in key (“client ID”) that you create for yourself. It's free.</p>
+        <ol class="steps">
+          <li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a>, sign in with your Gmail account and create a new project (call it <b>PackTrack</b>).</li>
+          <li>Search for <b>Gmail API</b> in the top bar, open it and tap <b>Enable</b>.</li>
+          <li>Open <b>Google Auth Platform</b> (or <b>APIs &amp; Services → OAuth consent screen</b>) → <b>Get started</b>. App name <b>PackTrack</b>, your email as support email, audience <b>External</b>, then finish.</li>
+          <li>Under <b>Audience → Test users</b>, add your own Gmail address.</li>
+          <li>Under <b>Clients</b> (or <b>Credentials</b>) → <b>Create client</b> → type <b>Web application</b>. Add:
+            <div class="copy-row">Authorized JavaScript origin: <code id="gmailOrigin"></code> <button type="button" class="btn ghost small-btn" data-copy="#gmailOrigin">Copy</button></div>
+            <div class="copy-row">Authorized redirect URI: <code id="gmailRedirect"></code> <button type="button" class="btn ghost small-btn" data-copy="#gmailRedirect">Copy</button></div>
+            Then <b>Create</b>.</li>
+          <li>Copy the <b>Client ID</b> (ends in <code>.apps.googleusercontent.com</code>) and paste it in PackTrack <a href="#" data-open="settingsDialog">Settings</a> → <b>Google client ID</b>.</li>
+          <li>Tap <b>Connect Gmail</b>. Google will say <i>“Google hasn't verified this app”</i>. That's expected for your own app, so tap <b>Continue</b>.</li>
+        </ol>
+        <p class="muted small">Google signs you out of the app after an hour. PackTrack checks Gmail automatically while you're signed in; after that, tap <b>Check Gmail now</b> to sign in again with one tap.</p>
+      </details>
+
+      <details class="setup">
+        <summary>Other email providers (needs a computer)</summary>
+        <p class="muted">For Outlook and other mailboxes, run the small <b>PackTrack helper</b> on your computer. It reads the mailbox (read-only) and hands the packages it finds to PackTrack.</p>
+        <ol class="muted">
+          <li>Download the project, then put your mail settings in <code>.env</code> (see <code>.env.example</code>).</li>
+          <li>Run <code>npm install</code> and <code>npm start</code>.</li>
+          <li>Enter the helper address (usually <code>http://localhost:3000</code>) in <a href="#" data-open="settingsDialog">Settings</a>.</li>
+        </ol>
+        <div id="emailStatus" class="card-lite"></div>
+        <div class="row end"><button id="emailSyncBtn" class="btn">Check mailbox now</button></div>
+      </details>
     </div>
 
     <div id="impResult" class="imp-result"></div>
@@ -173,7 +207,10 @@
         <input name="proxyUrl" placeholder="https://packtrack-proxy.you.workers.dev" autocomplete="off">
       </label>
 
-      <h3>Email sync helper</h3>
+      <h3>Email sync</h3>
+      <label>Google client ID <small>for Gmail sync, see Take from email → Email sync</small>
+        <input name="googleClientId" placeholder="1234-abc.apps.googleusercontent.com" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </label>
       <label>Helper address <small>optional, the PackTrack helper running on your computer</small>
         <input name="helperUrl" placeholder="http://localhost:3000" autocomplete="off">
       </label>
@@ -196,6 +233,7 @@
     </form>
   </dialog>
 
+  <datalist id="storeList"></datalist>
   <div id="toast" class="toast" hidden></div>
   <script src="app.js" type="module"></script>
 </body>

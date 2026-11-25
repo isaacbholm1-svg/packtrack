@@ -10,6 +10,7 @@ const DEFAULTS = {
   proxyUrl: '', // optional CORS proxy prefix, e.g. https://packtrack-proxy.you.workers.dev/?url=
   pollMinutes: 60,
   helperUrl: '', // optional local helper for email sync, e.g. http://localhost:3000
+  googleClientId: '', // for Gmail sync in the browser
 };
 
 const NUMBERS = new Set(['pollMinutes']);
