@@ -1,6 +1,8 @@
 import { db } from './lib/db.js';
 import { carrierList, carrierName, detectCarrier, normalizeNumber } from './lib/carriers.js';
-import { STORES, CATEGORIES, storeValue, storeName, storeLogoUrl } from './lib/stores.js';
+import {
+  STORES, CATEGORIES, storeValue, storeName, storeLogoSources, storeInitial, storeColor,
+} from './lib/stores.js';
 import { gmailState, startSignIn, finishSignIn, syncGmail, disconnectGmail } from './lib/gmail.js';
 import { extractShipments } from './lib/extract.js';
 import { bookmarkletSource, parsePasted } from './lib/bookmarklet.js';
@@ -99,7 +101,7 @@ function cardHtml(s) {
     <div>
       <div class="title">${esc(title)}</div>
       <div class="meta">
-        ${s.storeName ? `<span class="store-tag">${logoImg(s.storeLogo)}${esc(s.storeName)}</span>` : ''}
+        ${s.storeName ? `<span class="store-tag">${logoHtml(s.store)}${esc(s.storeName)}</span>` : ''}
         ${s.carrierName ? `<span>${esc(s.carrierName)}</span>` : ''}
         ${s.trackingNumber && s.label ? `<span class="mono">${esc(s.trackingNumber)}</span>` : ''}
         ${s.orderNumber ? `<span>Order ${esc(s.orderNumber)}</span>` : ''}
@@ -119,15 +121,34 @@ function optionList(items, selected, empty) {
     + items.map((i) => `<option value="${esc(i.id)}" ${i.id === selected ? 'selected' : ''}>${esc(i.name)}</option>`).join('');
 }
 
-function logoImg(url, cls = 'store-logo') {
-  return url ? `<img class="${cls}" src="${esc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.hidden=true">` : '';
+// Every store gets a logo: its site icon (Google, then DuckDuckGo), or else a letter badge.
+function letterBadge(cls, letter, color) {
+  return `<span class="${cls} logo-letter" style="background:${esc(color)}" aria-hidden="true">${esc(letter)}</span>`;
 }
+
+function logoHtml(value, cls = 'store-logo') {
+  if (!value) return '';
+  const [first, next] = storeLogoSources(value);
+  if (!first) return letterBadge(cls, storeInitial(value), storeColor(value));
+  return `<img class="${cls}" src="${esc(first)}" data-next="${esc(next)}" data-letter="${esc(storeInitial(value))}" data-color="${esc(storeColor(value))}"
+    alt="" loading="lazy" referrerpolicy="no-referrer" onload="ptLogoLoad(this)" onerror="ptLogoFail(this)">`;
+}
+
+window.ptLogoFail = (img) => {
+  const next = img.dataset.next;
+  if (next) { img.dataset.next = ''; img.src = next; return; }
+  img.outerHTML = letterBadge(img.className, img.dataset.letter, img.dataset.color);
+};
+
+// Google answers unknown sites with a tiny generic globe; treat that as "no logo".
+window.ptLogoLoad = (img) => {
+  if (img.src.includes('google.com/s2/favicons') && img.naturalWidth > 0 && img.naturalWidth <= 16) window.ptLogoFail(img);
+};
 
 // Free-text store field: shows the store's logo as soon as it's recognised.
 function storeInputHtml(value) {
-  const logo = storeLogoUrl(value);
   return `<span class="store-input">
-    <img class="store-logo" alt="" referrerpolicy="no-referrer" ${logo ? `src="${esc(logo)}"` : 'hidden'} onerror="this.hidden=true">
+    <span class="logo-slot">${logoHtml(value)}</span>
     <input name="store" list="storeList" value="${esc(storeName(value) || '')}" placeholder="Type a store…" autocomplete="off" autocapitalize="words">
     <button type="button" class="btn ghost browse-stores" title="Browse stores" aria-label="Browse stores">☰ Stores</button>
   </span>`;
@@ -135,12 +156,13 @@ function storeInputHtml(value) {
 
 function wireStoreInput(root) {
   const input = root.querySelector('input[name=store]');
-  const img = root.querySelector('.store-input .store-logo');
+  const slot = root.querySelector('.store-input .logo-slot');
   input.addEventListener('input', () => {
-    const url = storeLogoUrl(storeValue(input.value));
-    if (!url) { img.hidden = true; img.removeAttribute('src'); return; }
-    if (img.getAttribute('src') !== url) img.src = url;
-    img.hidden = false;
+    const v = storeValue(input.value);
+    const show = v && storeLogoSources(v).length ? v : ''; // only recognised stores and web addresses
+    if (slot.dataset.v === show) return;
+    slot.dataset.v = show;
+    slot.innerHTML = logoHtml(show);
   });
 }
 
@@ -157,7 +179,7 @@ function renderStoreGrid() {
   $('#storeGrid').innerHTML = groups.length
     ? groups.map(([title, list]) => `<h3>${esc(title)} <span class="count">${list.length}</span></h3>
         <div class="tiles">${list.map((st) => `<button type="button" class="store-tile" data-store="${esc(st.id)}">
-          ${logoImg(storeLogoUrl(st.id), 'tile-logo')}<span>${esc(st.name)}</span></button>`).join('')}</div>`).join('')
+          ${logoHtml(st.id, 'tile-logo')}<span>${esc(st.name)}</span></button>`).join('')}</div>`).join('')
     : `<p class="muted">No store called “${esc(q)}” in the list. Just type it in the store box, it works for any shop.</p>`;
 }
 
@@ -217,7 +239,7 @@ function renderDrawer() {
     <dl class="kv">
       ${s.trackingNumber ? `<dt>Tracking</dt><dd class="mono">${esc(s.trackingNumber)}</dd>` : ''}
       ${s.carrierName ? `<dt>Carrier</dt><dd>${esc(s.carrierName)}</dd>` : ''}
-      ${s.storeName ? `<dt>Store</dt><dd class="store-dd">${logoImg(s.storeLogo)}${esc(s.storeName)}</dd>` : ''}
+      ${s.storeName ? `<dt>Store</dt><dd class="store-dd">${logoHtml(s.store)}${esc(s.storeName)}</dd>` : ''}
       ${s.orderNumber ? `<dt>Order</dt><dd>${esc(s.orderNumber)}</dd>` : ''}
       ${s.eta ? `<dt>Estimated</dt><dd>${esc(fmtDate(s.eta, false))}</dd>` : ''}
       <dt>Added</dt><dd>${esc(fmtDate(s.createdAt))} · ${esc(s.source)}</dd>
@@ -352,7 +374,9 @@ function initAdd() {
       const created = out.filter((r) => r.created).length;
       toast(`${created} added${out.length - created ? `, ${out.length - created} already tracked` : ''}`);
       form.reset();
-      form.querySelector('.store-logo').hidden = true;
+      const slot = form.querySelector('.logo-slot');
+      slot.innerHTML = '';
+      slot.dataset.v = '';
       $('#detectPreview').innerHTML = '';
       state.filter = 'active';
       render();
@@ -441,7 +465,7 @@ function parseAndPreview(payload) {
   try { r = extractShipments(payload); } catch (err) { out.innerHTML = `<p class="err">${esc(err.message)}</p>`; return; }
 
   const header = `<div class="card-lite">
-      Store: ${r.store ? logoImg(storeLogoUrl(r.store.id)) : ''}<b>${esc(r.store?.name || 'not recognised')}</b>
+      Store: ${r.store ? logoHtml(r.store.id) : ''}<b>${esc(r.store?.name || 'not recognised')}</b>
       ${r.orderNumber ? ` · Order <b>${esc(r.orderNumber)}</b>` : ''}
     </div>
     <label>Name for these packages <input id="impLabel" value="${esc(r.label || '')}"></label>`;

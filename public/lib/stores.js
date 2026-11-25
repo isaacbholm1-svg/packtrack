@@ -177,3 +177,25 @@ export function storeLogoUrl(value) {
   const d = storeDomain(value);
   return d ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64` : null;
 }
+
+// Where to look for a store's logo, in order: Google's favicon service, then DuckDuckGo's.
+export function storeLogoSources(value) {
+  const d = storeDomain(value);
+  if (!d) return [];
+  return [
+    `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64`,
+    `https://icons.duckduckgo.com/ip3/${encodeURIComponent(d)}.ico`,
+  ];
+}
+
+// Fallback logo: the store's first letter on a colour picked from its name.
+export function storeInitial(value) {
+  const n = storeName(value) || '';
+  return (n.match(/[\p{L}\p{N}]/u)?.[0] || '?').toUpperCase();
+}
+
+export function storeColor(value) {
+  let h = 0;
+  for (const ch of String(storeName(value) || '')) h = (h * 31 + ch.codePointAt(0)) % 360;
+  return `hsl(${h}, 55%, 42%)`;
+}

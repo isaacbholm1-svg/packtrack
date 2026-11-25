@@ -78,3 +78,15 @@ test('custom stores are kept as typed; logos for known stores and web addresses'
   assert.match(storeLogoUrl('shop.example.fi'), /domain=shop\.example\.fi/);
   assert.equal(storeLogoUrl('My local shop'), null);
 });
+
+import { storeLogoSources, storeInitial, storeColor } from '../public/lib/stores.js';
+
+test('every store has a logo source or a letter badge', () => {
+  assert.equal(storeLogoSources('temu').length, 2);
+  assert.match(storeLogoSources('temu')[1], /duckduckgo\.com\/ip3\/temu\.com\.ico/);
+  assert.deepEqual(storeLogoSources('My local shop'), []);
+  assert.equal(storeInitial('My local shop'), 'M');
+  assert.equal(storeInitial('3djake'), '3');
+  assert.equal(storeInitial('ahlens'), 'Å');
+  assert.equal(storeColor('amazon'), storeColor('amazon'));
+});
