@@ -96,3 +96,58 @@ export function detectStore({ from = '', url = '', text = '' } = {}) {
   for (const [id, score] of scores) if (!best || score > best.score) best = { id, score };
   return best && best.score >= 2 ? STORE_BY_ID[best.id] : null;
 }
+
+// ---- Typed store names ----
+
+const squash = (v) => String(v || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+
+// Looks like a web address ("jimms.fi", "https://shop.example.com/x")?
+export function domainFromText(text) {
+  const t = String(text || '').trim().toLowerCase();
+  const m = /^(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)(?:[/:?#]|$)/.exec(t);
+  return m ? m[1] : null;
+}
+
+// Recognise what the user typed: "amazon", "Amazon.de", "bambu lab", "verkkokauppa.com", "store.bambulab.com"…
+export function matchStore(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  if (STORE_BY_ID[raw]) return STORE_BY_ID[raw];
+  const domain = domainFromText(raw);
+  if (domain) {
+    for (const s of STORES) if (s.domains.some((d) => hostMatches(domain, d))) return s;
+  }
+  const q = squash(raw);
+  if (q.length < 2) return null;
+  for (const s of STORES) {
+    const keys = [s.id, s.name, ...s.names, ...s.domains, ...s.domains.map((d) => d.split('.')[0])].map(squash);
+    if (keys.includes(q)) return s;
+  }
+  return null;
+}
+
+// Store value to save: a known store's id, or the typed text as a custom store.
+export function storeValue(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  return matchStore(raw)?.id || raw;
+}
+
+export function storeName(value) {
+  if (!value) return null;
+  return STORE_BY_ID[value]?.name || value;
+}
+
+// Domain used for the store's logo (a known store's main site, or a typed web address).
+export function storeDomain(value) {
+  if (!value) return null;
+  const s = STORE_BY_ID[value] || matchStore(value);
+  if (s) return s.domains[0];
+  return domainFromText(value);
+}
+
+// The store's own site icon, via Google's favicon service.
+export function storeLogoUrl(value) {
+  const d = storeDomain(value);
+  return d ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64` : null;
+}

@@ -1,6 +1,7 @@
 import { db } from './lib/db.js';
 import { carrierList, carrierName, detectCarrier, normalizeNumber } from './lib/carriers.js';
-import { STORES } from './lib/stores.js';
+import { STORES, storeValue, storeName, storeLogoUrl } from './lib/stores.js';
+import { gmailState, startSignIn, finishSignIn, syncGmail, disconnectGmail } from './lib/gmail.js';
 import { extractShipments } from './lib/extract.js';
 import { bookmarkletSource, parsePasted } from './lib/bookmarklet.js';
 import { getSettings, updateSettings } from './lib/settings.js';
@@ -14,7 +15,6 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const CARRIERS = carrierList();
-const STORE_OPTIONS = STORES.map((s) => ({ id: s.id, name: s.name }));
 
 const state = {
   shipments: [],
@@ -99,7 +99,7 @@ function cardHtml(s) {
     <div>
       <div class="title">${esc(title)}</div>
       <div class="meta">
-        ${s.storeName ? `<span class="store-tag">${esc(s.storeName)}</span>` : ''}
+        ${s.storeName ? `<span class="store-tag">${logoImg(s.storeLogo)}${esc(s.storeName)}</span>` : ''}
         ${s.carrierName ? `<span>${esc(s.carrierName)}</span>` : ''}
         ${s.trackingNumber && s.label ? `<span class="mono">${esc(s.trackingNumber)}</span>` : ''}
         ${s.orderNumber ? `<span>Order ${esc(s.orderNumber)}</span>` : ''}
@@ -119,6 +119,48 @@ function optionList(items, selected, empty) {
     + items.map((i) => `<option value="${esc(i.id)}" ${i.id === selected ? 'selected' : ''}>${esc(i.name)}</option>`).join('');
 }
 
+function logoImg(url, cls = 'store-logo') {
+  return url ? `<img class="${cls}" src="${esc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.hidden=true">` : '';
+}
+
+// Free-text store field: shows the store's logo as soon as it's recognised.
+function storeInputHtml(value) {
+  const logo = storeLogoUrl(value);
+  return `<span class="store-input">
+    <img class="store-logo" alt="" referrerpolicy="no-referrer" ${logo ? `src="${esc(logo)}"` : 'hidden'} onerror="this.hidden=true">
+    <input name="store" list="storeList" value="${esc(storeName(value) || '')}" placeholder="Type a store…" autocomplete="off" autocapitalize="words">
+  </span>`;
+}
+
+function wireStoreInput(root) {
+  const input = root.querySelector('input[name=store]');
+  const img = root.querySelector('.store-input .store-logo');
+  input.addEventListener('input', () => {
+    const url = storeLogoUrl(storeValue(input.value));
+    if (!url) { img.hidden = true; img.removeAttribute('src'); return; }
+    if (img.getAttribute('src') !== url) img.src = url;
+    img.hidden = false;
+  });
+}
+
+// Store suggestions and the store filter include stores you typed yourself.
+function knownStores() {
+  const out = new Map(STORES.map((st) => [st.id, st.name]));
+  for (const sh of db.listShipments()) if (sh.store && !out.has(sh.store)) out.set(sh.store, sh.store);
+  return out;
+}
+
+function renderStoreLists() {
+  const all = knownStores();
+  $('#storeList').innerHTML = [...all.values()].map((n) => `<option value="${esc(n)}">`).join('');
+  const used = [...new Set(state.shipments.map((s) => s.store).filter(Boolean))]
+    .map((id) => ({ id, name: all.get(id) || id }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const html = optionList(used, state.store, 'All stores');
+  if ($('#storeFilter').innerHTML !== html) $('#storeFilter').innerHTML = html;
+  $('#storeFilter').hidden = used.length < 2;
+}
+
 function renderDrawer() {
   const s = state.shipments.find((x) => x.id === state.openId);
   if (!s) { closeDrawer(); return; }
@@ -132,7 +174,7 @@ function renderDrawer() {
     <dl class="kv">
       ${s.trackingNumber ? `<dt>Tracking</dt><dd class="mono">${esc(s.trackingNumber)}</dd>` : ''}
       ${s.carrierName ? `<dt>Carrier</dt><dd>${esc(s.carrierName)}</dd>` : ''}
-      ${s.storeName ? `<dt>Store</dt><dd>${esc(s.storeName)}</dd>` : ''}
+      ${s.storeName ? `<dt>Store</dt><dd class="store-dd">${logoImg(s.storeLogo)}${esc(s.storeName)}</dd>` : ''}
       ${s.orderNumber ? `<dt>Order</dt><dd>${esc(s.orderNumber)}</dd>` : ''}
       ${s.eta ? `<dt>Estimated</dt><dd>${esc(fmtDate(s.eta, false))}</dd>` : ''}
       <dt>Added</dt><dd>${esc(fmtDate(s.createdAt))} · ${esc(s.source)}</dd>
@@ -156,7 +198,7 @@ function renderDrawer() {
         <label>Name <input name="label" value="${esc(s.label || '')}"></label>
         <label>Tracking number <input name="trackingNumber" value="${esc(s.trackingNumber || '')}"></label>
         <label>Carrier <select name="carrier">${optionList(CARRIERS, s.carrier, '—')}</select></label>
-        <label>Store <select name="store">${optionList(STORE_OPTIONS, s.store, '—')}</select></label>
+        <label>Store ${storeInputHtml(s.store)}</label>
         <label>Order number <input name="orderNumber" value="${esc(s.orderNumber || '')}"></label>
       </div>
       <div class="row">
@@ -171,11 +213,13 @@ function renderDrawer() {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.target));
     for (const k of Object.keys(f)) if (f[k] === '') f[k] = null;
+    f.store = storeValue(f.store);
     const before = s.trackingNumber;
     const updated = editShipment(s.id, f);
     toast('Saved');
     if (updated.trackingNumber && updated.trackingNumber !== before) refreshShipment(s.id);
   };
+  wireStoreInput($('#editForm'));
   $('#archiveBtn').onclick = () => editShipment(s.id, { archived: !s.archived });
   $('#deleteBtn').onclick = () => {
     if (!confirm('Delete this package?')) return;
@@ -209,6 +253,7 @@ function load() {
   notifyChanges(shipments);
   state.shipments = shipments;
   renderProvider();
+  renderStoreLists();
   render();
 }
 
@@ -238,7 +283,7 @@ function initAdd() {
   const form = $('#addForm');
   const dlg = $('#addDialog');
   form.carrier.innerHTML = optionList(CARRIERS, '', 'Detect automatically');
-  form.store.innerHTML = optionList(STORE_OPTIONS, '', '—');
+  wireStoreInput(form);
 
   form.numbers.oninput = () => {
     const lines = form.numbers.value.split(/\n/).map((l) => l.trim()).filter(Boolean).slice(0, 30);
@@ -259,11 +304,12 @@ function initAdd() {
     const numbers = f.numbers.split(/[\n,;]+/).map((n) => n.trim()).filter(Boolean);
     try {
       const out = addAndTrack(numbers.map((trackingNumber) => ({
-        trackingNumber, label: f.label || null, carrier: f.carrier || null, store: f.store || null, orderNumber: f.orderNumber || null,
+        trackingNumber, label: f.label || null, carrier: f.carrier || null, store: storeValue(f.store), orderNumber: f.orderNumber || null,
       })), 'manual');
       const created = out.filter((r) => r.created).length;
       toast(`${created} added${out.length - created ? `, ${out.length - created} already tracked` : ''}`);
       form.reset();
+      form.querySelector('.store-logo').hidden = true;
       $('#detectPreview').innerHTML = '';
       state.filter = 'active';
       render();
@@ -284,8 +330,66 @@ function renderEmailStatus() {
   const url = getSettings().helperUrl;
   $('#emailStatus').innerHTML = url
     ? `Helper: <code>${esc(url)}</code>`
-    : 'No helper set up. Email sync needs the PackTrack helper running on your computer (see Settings).';
+    : 'No helper set up. Add its address in Settings.';
   $('#emailSyncBtn').disabled = !url;
+
+  const g = gmailState();
+  $('#gmailStatus').innerHTML = !g.configured
+    ? 'Not set up yet. Follow the one-time setup below.'
+    : !g.connected ? 'Ready. Tap <b>Connect Gmail</b> to sign in.'
+      : `Connected${g.lastSyncAt ? ` · last checked ${esc(relTime(g.lastSyncAt))}` : ''}${g.lastError ? `<div class="err">${esc(g.lastError)}</div>` : ''}`;
+  $('#gmailSyncBtn').textContent = !g.connected ? 'Connect Gmail' : 'Check Gmail now';
+  $('#gmailSyncBtn').disabled = !g.configured;
+  $('#gmailDisconnect').hidden = !g.connected;
+  $('#gmailSetup').open = !g.configured;
+  $('#gmailOrigin').textContent = location.origin;
+  $('#gmailRedirect').textContent = redirectUrl();
+}
+
+// The address Google sends you back to; must match the one in your Google client.
+function redirectUrl() {
+  return location.origin + location.pathname.replace(/index\.html$/, '');
+}
+
+async function runGmailSync({ quiet = false } = {}) {
+  try {
+    const r = await syncGmail();
+    const out = addAndTrack(r.items, 'email');
+    const added = out.filter((x) => x.created).length;
+    const msg = `Checked ${r.scanned} new email(s): ${added} package(s) added${out.length - added ? `, ${out.length - added} updated` : ''}.`;
+    if (!quiet || added) toast(msg, 4000);
+    if (!quiet) $('#impResult').innerHTML = `<div class="card-lite">${esc(msg)}</div>`;
+  } catch (err) {
+    if (err.needsSignIn) {
+      if (!quiet) startSignIn(redirectUrl());
+      return;
+    }
+    db.setSettings({ gmailLastError: err.message });
+    if (!quiet) toast(err.message, 5000);
+  } finally {
+    if (!$('#importDialog [data-ipane=email]').hidden) renderEmailStatus();
+  }
+}
+
+// Checks Gmail in the background while the app is open and the sign-in is still valid (1 hour).
+function startGmailAutoSync() {
+  const tick = () => {
+    const g = gmailState();
+    if (g.tokenValid && (!g.lastSyncAt || Date.now() - new Date(g.lastSyncAt).getTime() > 15 * 60e3)) runGmailSync({ quiet: true });
+  };
+  setTimeout(tick, 1500);
+  setInterval(tick, 5 * 60e3);
+}
+
+// Coming back from Google's sign-in page.
+function handleGmailReturn() {
+  const res = finishSignIn(location.hash);
+  if (!res) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  showImportTab('email');
+  $('#importDialog').showModal();
+  if (res === 'ok') runGmailSync();
+  else toast(`Gmail: ${res.slice(6)}`, 5000);
 }
 
 function parseAndPreview(payload) {
@@ -294,7 +398,7 @@ function parseAndPreview(payload) {
   try { r = extractShipments(payload); } catch (err) { out.innerHTML = `<p class="err">${esc(err.message)}</p>`; return; }
 
   const header = `<div class="card-lite">
-      Store: <b>${esc(r.store?.name || 'not recognised')}</b>
+      Store: ${r.store ? logoImg(storeLogoUrl(r.store.id)) : ''}<b>${esc(r.store?.name || 'not recognised')}</b>
       ${r.orderNumber ? ` · Order <b>${esc(r.orderNumber)}</b>` : ''}
     </div>
     <label>Name for these packages <input id="impLabel" value="${esc(r.label || '')}"></label>`;
@@ -407,6 +511,22 @@ function initImport() {
       b.textContent = 'Check mailbox now';
     }
   };
+  $('#gmailSyncBtn').onclick = () => {
+    const g = gmailState();
+    if (!g.configured) { toast('Add your Google client ID in Settings first'); return; }
+    if (!g.tokenValid) { startSignIn(redirectUrl()); return; }
+    $('#gmailSyncBtn').disabled = true;
+    $('#gmailSyncBtn').textContent = 'Checking…';
+    runGmailSync();
+  };
+  $('#gmailDisconnect').onclick = () => {
+    if (!confirm('Disconnect Gmail from PackTrack on this device?')) return;
+    disconnectGmail();
+    renderEmailStatus();
+  };
+  for (const b of $$('[data-copy]')) {
+    b.onclick = async () => toast(await copyText($(b.dataset.copy).textContent) ? 'Copied' : 'Could not copy');
+  }
   dlg.querySelector('[data-close]').onclick = () => dlg.close();
 }
 
@@ -479,7 +599,6 @@ function initSettings() {
 // ---------- wiring ----------
 
 function main() {
-  $('#storeFilter').innerHTML = optionList(STORE_OPTIONS, '', 'All stores');
   initAdd();
   initImport();
   initSettings();
@@ -518,8 +637,10 @@ function main() {
     refreshAll();
   };
 
+  handleGmailReturn();
   handleIncomingImport();
   window.addEventListener('hashchange', handleIncomingImport);
+  startGmailAutoSync();
   setInterval(render, 60e3); // keep "x min ago" fresh
   startPoller();
 }

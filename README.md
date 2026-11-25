@@ -7,7 +7,9 @@ Track all your packages in one place, whichever carrier and store they come from
 - **Import from stores:** Amazon, Temu, Bambu Lab, Verkkokauppa.com, AliExpress, eBay, SHEIN, Etsy, Gigantti/Elgiganten, Power, Jimm's, Proshop, Zalando, IKEA, Prusa, Creality and more:
   - **paste** a shipping email or order page,
   - a **browser button** (bookmarklet) that sends the order page you're looking at to PackTrack,
-  - **email sync** through the optional helper you run on your computer.
+  - **Gmail sync** that runs right in the app, phone included,
+  - **other mailboxes** through the optional helper you run on your computer.
+- Type any store name; known stores (and any shop web address) get their logo.
 - Orders without a tracking number yet are kept as **“awaiting tracking”**, and filled in when the tracking number arrives.
 - Search, store filter, archive, notifications while open, dark mode, backup export/restore.
 
@@ -50,9 +52,24 @@ If a card shows *“The browser blocked the request”*, that API doesn't accept
 
 Without any key you can still keep a list of packages; each one links to the carrier's own tracking page and to 17TRACK. To try the app first, pick **Settings → Provider → Demo data** (fake progress, marked “(demo)”).
 
-## Optional helper: email sync
+## Gmail sync (works on your phone)
 
-A web page can't read your mailbox, so email sync runs in a small helper on your computer. It opens the mailbox **read-only** and returns the shipments it finds to the page, which stores them.
+PackTrack can read your shipping emails straight from Gmail, inside the app. Nothing passes through any other server. Gmail access is **read-only** (`gmail.readonly`), and the access key Google gives the app expires after one hour.
+
+Google requires a free OAuth client ID that you create once (about 10 minutes). The steps are in the app under **Take from email → Email sync → One-time setup**:
+
+1. [console.cloud.google.com](https://console.cloud.google.com/): create a project, then enable the **Gmail API**.
+2. **Google Auth Platform / OAuth consent screen**: set it up as *External* and add your own Gmail address as a **test user**.
+3. **Clients / Credentials → Create client → Web application**:
+   - Authorized JavaScript origin: `https://<your-username>.github.io`
+   - Authorized redirect URI: `https://<your-username>.github.io/packtrack/`
+4. Paste the client ID in **Settings → Google client ID**, then tap **Connect Gmail**. Google shows “Google hasn't verified this app”, which is expected for your own app.
+
+While you're signed in, PackTrack checks Gmail every 15 minutes while it's open. After the hour is up, **Check Gmail now** signs you in again with a tap. Only messages that look like shipping mail (from the last 30 days on the first run) are read, and each message is read once.
+
+## Optional helper: other email providers
+
+For mailboxes other than Gmail, email sync runs in a small helper on your computer. It opens the mailbox **read-only** and returns the shipments it finds to the page, which stores them.
 
 ```bash
 npm install
@@ -76,7 +93,7 @@ Then put `http://localhost:3000` in **Settings → Helper address** and use **Ta
 
 Plain digit runs (which could be FedEx, DHL Express or DPD numbers) are only accepted in the first two cases, so phone and invoice numbers aren't picked up. The store comes from the sender address or page URL, and the order number from store formats (Amazon `123-1234567-1234567`, Temu `PO-…`) or *order number / tilausnumero / Bestellnummer* keywords.
 
-Adding a store: `public/lib/stores.js`. Adding a carrier: `public/lib/carriers.js`.
+Adding a store: `public/lib/stores.js`. Store logos are each shop's own site icon, loaded through Google's favicon service (`google.com/s2/favicons`), which only sees the shop's domain. Adding a carrier: `public/lib/carriers.js`.
 
 ## Project layout
 

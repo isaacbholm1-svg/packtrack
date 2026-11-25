@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
-import { extractShipments } from '../public/lib/extract.js';
+import { itemsFromMail } from '../public/lib/mail.js';
 
 const DATA_DIR = process.env.PACKTRACK_DATA_DIR || path.resolve('data');
 const STATE_FILE = path.join(DATA_DIR, 'helper-state.json');
@@ -37,16 +37,7 @@ function writeState(s) {
   fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2));
 }
 
-// Turns one parsed email into items for the app.
-export function itemsFromMail({ from, subject, text, html }) {
-  const r = extractShipments({ from, subject, text, html });
-  if (!r.store && !r.candidates.length) return [];
-  const base = { store: r.store?.id || null, orderNumber: r.orderNumber, label: r.label };
-  const tracked = r.candidates.filter((c) => c.confidence === 'high' || (r.store && c.confidence === 'medium'));
-  if (tracked.length) return tracked.map((c) => ({ ...base, trackingNumber: c.trackingNumber, carrier: c.carrier }));
-  if (r.store && r.orderNumber) return [base];
-  return [];
-}
+export { itemsFromMail };
 
 let running = null;
 
