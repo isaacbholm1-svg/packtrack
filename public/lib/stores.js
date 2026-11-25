@@ -1,8 +1,13 @@
 // Online stores PackTrack recognises in emails and order pages.
 // `domains` matches the sender address / page URL; `names` matches brand mentions in text;
 // `order` holds store-specific order-number formats (tried before the generic keyword search).
+// The detailed stores are below; the long list of other stores is in store-list.js.
 
-export const STORES = [
+import { STORE_LIST, CATEGORIES, DETAILED_CATEGORY } from './store-list.js';
+
+export { CATEGORIES };
+
+const DETAILED = [
   {
     id: 'amazon', name: 'Amazon',
     domains: ['amazon.com', 'amazon.de', 'amazon.co.uk', 'amazon.se', 'amazon.fr', 'amazon.it', 'amazon.es', 'amazon.nl', 'amazon.pl', 'amazon.ca', 'amazon.com.au', 'amazon.co.jp', 'amazon.com.be', 'amazon.com.tr'],
@@ -29,7 +34,7 @@ export const STORES = [
   },
   {
     id: 'aliexpress', name: 'AliExpress',
-    domains: ['aliexpress.com', 'aliexpress.us', 'aliexpress.ru', 'alibaba.com'],
+    domains: ['aliexpress.com', 'aliexpress.us', 'aliexpress.ru'],
     names: ['AliExpress'],
     order: [/order\s*(?:number|no\.?|id)?\s*[:#]?\s*(\d{15,20})\b/i],
   },
@@ -62,7 +67,28 @@ export const STORES = [
   { id: 'dhgate', name: 'DHgate', domains: ['dhgate.com'], names: ['DHgate'], order: [] },
 ];
 
+export const STORES = [
+  ...DETAILED.map((st) => ({ ...st, category: DETAILED_CATEGORY[st.id] || 'marketplace' })),
+  ...STORE_LIST.map(([id, name, domains, category, names]) => ({
+    id, name, domains: domains.split(/\s+/), category, names: names ?? [name], order: [],
+  })),
+];
+
 export const STORE_BY_ID = Object.fromEntries(STORES.map((s) => [s.id, s]));
+
+const escapeRe = (v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Built once: patterns for a store's domains and names appearing in text.
+let matchers = null;
+function storeMatchers() {
+  if (matchers) return matchers;
+  matchers = STORES.map((st) => ({
+    st,
+    domainRe: new RegExp(`\\b(?:${st.domains.map(escapeRe).join('|')})\\b`, 'i'),
+    nameRe: st.names.length ? new RegExp(`(^|[^\\p{L}\\p{N}])(?:${st.names.map(escapeRe).join('|')})(?![\\p{L}\\p{N}])`, 'iu') : null,
+  }));
+  return matchers;
+}
 
 function hostMatches(host, domain) {
   host = host.toLowerCase();
@@ -78,18 +104,18 @@ export function detectStore({ from = '', url = '', text = '' } = {}) {
   let pageHost = '';
   try { pageHost = url ? new URL(url).hostname : ''; } catch { /* ignore */ }
 
-  for (const s of STORES) {
-    for (const d of s.domains) {
-      if (fromDomain && hostMatches(fromDomain, d)) add(s.id, 10);
-      if (pageHost && hostMatches(pageHost, d)) add(s.id, 10);
-      // domain mentioned in the body (e.g. "Thanks for shopping at verkkokauppa.com")
-      const re = new RegExp(`\\b${d.replace(/\./g, '\\.')}\\b`, 'i');
-      if (re.test(text)) add(s.id, 2);
+  for (const { st, domainRe, nameRe } of storeMatchers()) {
+    for (const d of st.domains) {
+      if (fromDomain && hostMatches(fromDomain, d)) { add(st.id, 10); break; }
     }
-    for (const name of s.names) {
-      const re = new RegExp(`(^|[^\\w])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`, 'i');
-      if (re.test(from)) add(s.id, 6);
-      if (re.test(text)) add(s.id, 1);
+    for (const d of st.domains) {
+      if (pageHost && hostMatches(pageHost, d)) { add(st.id, 10); break; }
+    }
+    // domain mentioned in the body (e.g. "Thanks for shopping at verkkokauppa.com")
+    if (domainRe.test(text)) add(st.id, 2);
+    if (nameRe) {
+      if (nameRe.test(from)) add(st.id, 6);
+      if (nameRe.test(text)) add(st.id, 1);
     }
   }
   let best = null;

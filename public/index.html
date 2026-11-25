@@ -80,6 +80,7 @@
           <span class="store-input">
             <img class="store-logo" alt="" referrerpolicy="no-referrer" hidden onerror="this.hidden=true">
             <input name="store" list="storeList" placeholder="Type a store…" autocomplete="off" autocapitalize="words">
+            <button type="button" class="btn ghost browse-stores" title="Browse stores" aria-label="Browse stores">☰ Stores</button>
           </span>
         </label>
         <label>Order number <input name="orderNumber"></label>
@@ -231,6 +232,16 @@
         <button value="save" class="btn primary">Save</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Store picker -->
+  <dialog id="storePicker" class="wide">
+    <div class="dialog-head">
+      <h2>Stores</h2>
+      <button class="btn ghost" id="storePickerClose" aria-label="Close">✕</button>
+    </div>
+    <input id="storeSearch" type="search" placeholder="Search stores…" autocomplete="off" aria-label="Search stores">
+    <div id="storeGrid" class="store-grid"></div>
   </dialog>
 
   <datalist id="storeList"></datalist>
