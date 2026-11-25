@@ -242,3 +242,13 @@ details.setup summary { cursor: pointer; font-weight: 600; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .store-grid { max-height: 62vh; }
 }
+
+/* Letter badge when a store has no logo */
+.logo-slot { display: contents; }
+.logo-letter {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  color: #fff; font-weight: 700; line-height: 1; font-size: 12px; font-family: system-ui, sans-serif;
+}
+.store-tag .logo-letter { font-size: 9px; }
+.store-input .logo-letter { font-size: 15px; border: 0; padding: 0; }
+.tile-logo.logo-letter { font-size: 12px; }
